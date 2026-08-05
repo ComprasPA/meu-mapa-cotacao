@@ -128,7 +128,6 @@ def formatar_pct_com_seta(valor):
     
     val_fmt = f"{val_float:+,.2f}%".replace(',', 'X').replace('.', ',').replace('X', '.')
     
-    # Setas maiores e mais grossas (font-size: 18px e font-weight: 900)
     if val_float > 0:
         return f"<span style='color: #c00000; font-size: 18px; font-weight: 900; vertical-align: middle;'>↑</span> <span style='font-size: 13px; font-weight: bold;'>{val_fmt}</span>"
     elif val_float < 0:
@@ -546,7 +545,7 @@ else:
         st.markdown("---")
         st.subheader("💡 Insight Rápido do Especialista")
 
-        itens_em_queda = df_final[(df_final['Variação (Δ%)'] != "") & (df_final['Variação (Δ%)'] < 0)]
+        itens_em_queda = df_final[(df_final['Variação (Δ%)'] != "") & (pd.to_numeric(df_final['Variação (Δ%)']) < 0)]
         if not itens_em_queda.empty:
             insight_texto = (
                 f"Identificada oportunidade expressiva de economia em **{len(itens_em_queda)} item(ns)** com redução de custos favorável. "
