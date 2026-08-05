@@ -92,10 +92,14 @@ def limpar_valor(valor):
         return 0.0
 
 def formatar_brl(valor):
+    if valor == "" or pd.isna(valor) or valor is None:
+        return ""
     try:
         val_float = float(valor)
     except:
-        val_float = 0.0
+        return ""
+    if val_float <= 0:
+        return ""
     return f"R$ {val_float:,.2f}".replace(',', 'X').replace('.', ',').replace('X', '.')
 
 def formatar_qtd(valor):
@@ -106,17 +110,21 @@ def formatar_qtd(valor):
     return f"{val_float:,.2f}".replace(',', 'X').replace('.', ',').replace('X', '.')
 
 def formatar_pct(valor):
+    if valor == "" or pd.isna(valor) or valor is None:
+        return ""
     try:
         val_float = float(valor)
     except:
-        val_float = 0.0
+        return ""
     return f"{val_float:+,.2f}%".replace(',', 'X').replace('.', ',').replace('X', '.')
 
 def formatar_pct_com_seta(valor):
+    if valor == "" or pd.isna(valor) or valor is None:
+        return ""
     try:
         val_float = float(valor)
     except:
-        val_float = 0.0
+        return ""
     
     val_fmt = f"{val_float:+,.2f}%".replace(',', 'X').replace('.', ',').replace('X', '.')
     
@@ -323,8 +331,9 @@ else:
 
         item_contador += 1
 
-        ultimo_preco = preco_novo
-        forn_hist = "Sem Histórico"
+        ultimo_preco = 0.0
+        forn_hist = ""
+        tem_historico = False
         
         if not historico.empty:
             match_linhas = []
@@ -336,6 +345,7 @@ else:
                         break
                         
             if match_linhas:
+                tem_historico = True
                 ultima_ocorrencia = match_linhas[-1]
                 try:
                     preco_hist_col = limpar_valor(ultima_ocorrencia.get(10, 0))
@@ -363,14 +373,19 @@ else:
                 except:
                     pass
             
-        variacao = ((preco_novo - ultimo_preco) / ultimo_preco) * 100 if ultimo_preco > 0 else 0.0
-        
-        if variacao < 0:
-            tendencia = "Queda"
-        elif variacao > 0:
-            tendencia = "Alta"
+        if tem_historico and ultimo_preco > 0:
+            variacao = ((preco_novo - ultimo_preco) / ultimo_preco) * 100
+            if variacao < 0:
+                tendencia = "Queda"
+            elif variacao > 0:
+                tendencia = "Alta"
+            else:
+                tendencia = "Estabilidade"
         else:
-            tendencia = "Estabilidade"
+            ultimo_preco = ""
+            forn_hist = ""
+            variacao = ""
+            tendencia = "Sem Histórico"
             
         resultados.append({
             'Item': num_item,
@@ -403,8 +418,6 @@ else:
         df_display['Qtd'] = df_display['Qtd'].apply(formatar_qtd)
         df_display['Novo Preço Unit. (R$)'] = df_display['Novo Preço Unit. (R$)'].apply(formatar_brl)
         df_display['Último Preço Hist. (R$)'] = df_display['Último Preço Hist. (R$)'].apply(formatar_brl)
-        
-        # Aplica setas coloridas na coluna Variação (Δ%) para exibição interativa
         df_display['Variação (Δ%)'] = df_final['Variação (Δ%)'].apply(formatar_pct_com_seta)
 
         # Exibição do painel interativo formatado com classe CSS 'dataframe' (Estilo Dados Bancários)
@@ -474,23 +487,29 @@ else:
                 var_val = row['Variação (Δ%)']
                 tendencia = str(row['Tendência'])
                 
+                ult_preco_val = row['Último Preço Hist. (R$)']
+                ult_preco_str = formatar_brl(ult_preco_val) if ult_preco_val != "" else ""
+                forn_ant_str = str(row['Fornecedor do Último Preço']) if ult_preco_val != "" else ""
+                var_str = formatar_pct(var_val) if var_val != "" else ""
+                
                 pdf.cell(col_widths[0], 6, limpar_texto_pdf(str(row['Item'])), border=1, fill=fill, align="C")
                 pdf.cell(col_widths[1], 6, limpar_texto_pdf(str(row['Código'])), border=1, fill=fill, align="C")
                 pdf.cell(col_widths[2], 6, limpar_texto_pdf(str(row['Descrição Resumida'])[:40]), border=1, fill=fill, align="L")
                 pdf.cell(col_widths[3], 6, limpar_texto_pdf(str(row['Qtd'])), border=1, fill=fill, align="C")
                 pdf.cell(col_widths[4], 6, limpar_texto_pdf(formatar_brl(row['Novo Preço Unit. (R$)'])), border=1, fill=fill, align="R")
                 pdf.cell(col_widths[5], 6, limpar_texto_pdf(str(row['Fornecedor do Preço Novo'])[:28]), border=1, fill=fill, align="L")
-                pdf.cell(col_widths[6], 6, limpar_texto_pdf(formatar_brl(row['Último Preço Hist. (R$)'])), border=1, fill=fill, align="R")
-                pdf.cell(col_widths[7], 6, limpar_texto_pdf(str(row['Fornecedor do Último Preço'])[:28]), border=1, fill=fill, align="L")
+                pdf.cell(col_widths[6], 6, limpar_texto_pdf(ult_preco_str), border=1, fill=fill, align="R")
+                pdf.cell(col_widths[7], 6, limpar_texto_pdf(forn_ant_str[:28]), border=1, fill=fill, align="L")
                 
-                if var_val < 0:
-                    pdf.set_text_color(0, 128, 0)
-                elif var_val > 0:
-                    pdf.set_text_color(200, 0, 0)
-                else:
-                    pdf.set_text_color(0, 0, 0)
+                if var_val != "":
+                    if var_val < 0:
+                        pdf.set_text_color(0, 128, 0)
+                    elif var_val > 0:
+                        pdf.set_text_color(200, 0, 0)
+                    else:
+                        pdf.set_text_color(0, 0, 0)
                 
-                pdf.cell(col_widths[8], 6, limpar_texto_pdf(formatar_pct(var_val)), border=1, fill=fill, align="R")
+                pdf.cell(col_widths[8], 6, limpar_texto_pdf(var_str), border=1, fill=fill, align="R")
                 pdf.cell(col_widths[9], 6, limpar_texto_pdf(tendencia), border=1, fill=fill, align="C")
                 
                 pdf.ln()
@@ -526,7 +545,7 @@ else:
         st.markdown("---")
         st.subheader("💡 Insight Rápido do Especialista")
 
-        itens_em_queda = df_final[df_final['Variação (Δ%)'] < 0]
+        itens_em_queda = df_final[(df_final['Variação (Δ%)'] != "") & (df_final['Variação (Δ%)'] < 0)]
         if not itens_em_queda.empty:
             insight_texto = (
                 f"Identificada oportunidade expressiva de economia em **{len(itens_em_queda)} item(ns)** com redução de custos favorável. "
@@ -535,7 +554,7 @@ else:
             )
         else:
             insight_texto = (
-                "Cenário de alta nos preços detectado. Recomenda-se a **renegociação com base no histórico de volume** "
+                "Cenário de alta nos preços detectado ou itens sem histórico prévio. Recomenda-se a **renegociação com base no histórico de volume** "
                 "ou busca por fornecedores alternativos na praça local para evitar impacto no orçamento."
             )
 
