@@ -14,9 +14,6 @@ st.set_page_config(
     layout="wide"
 )
 
-# Chave do Gemini pré-configurada
-GEMINI_API_KEY = "AQ.Ab8RN6I0XGpR9RtaXtPUpM1gvgYbVRMTtwkRDXYvMTKxfDEgtQ"
-
 # Estilização visual corporativa
 st.markdown("""
     <style>
@@ -52,11 +49,19 @@ st.markdown("Plataforma analítica para homologação de preços, variação de 
 if 'limpar_cache' not in st.session_state:
     st.session_state.limpar_cache = False
 
-# Barra lateral para upload e ações de controle
+# Barra lateral para upload, chave da IA e ações de controle
 st.sidebar.header("📁 Fontes de Dados")
 uploaded_cot = st.sidebar.file_uploader(
     "Carregar Mapa de Cotação Atual (.csv, .xlsx ou .docx)", 
     type=["csv", "xlsx", "docx"]
+)
+
+st.sidebar.markdown("---")
+st.sidebar.header("🤖 Inteligência Artificial")
+gemini_api_key = st.sidebar.text_input(
+    "Chave da API do Gemini", 
+    type="password", 
+    help="Insira sua chave da API do Google AI Studio para habilitar o painel executivo da IA."
 )
 
 st.sidebar.markdown("---")
@@ -153,7 +158,6 @@ def extrair_tabela_excel_inteligente(arquivo_excel):
         sheet_name = xls.sheet_names[0]
         df_raw = pd.read_excel(xls, sheet_name=sheet_name, header=None, dtype=str)
         
-        # Procura a linha de cabeçalho que contém 'Item' ou 'Código' de forma segura com string
         header_row_idx = 0
         for idx, row in df_raw.iterrows():
             row_str = " ".join([str(x) for x in row.values if pd.notna(x)]).lower()
@@ -222,13 +226,11 @@ else:
     c_forn = achar_coluna(cotacao, ['fornecedor', 'empresa'])
     c_status = achar_coluna(cotacao, ['status'])
 
-    # Filtra apenas o fornecedor vencedor (melhor preço) se houver coluna de status
     if c_status and not cotacao.empty:
         df_vencedores = cotacao[cotacao[c_status].astype(str).str.contains('vencedor|melhor preço', case=False, na=False)]
         if not df_vencedores.empty:
             cotacao = df_vencedores
 
-    # Remove duplicadas por código para garantir 1 linha por item real
     if c_cod and not cotacao.empty:
         cotacao = cotacao.drop_duplicates(subset=[c_cod])
 
@@ -250,7 +252,6 @@ else:
 
         item_contador += 1
 
-        # Busca rigorosa da última ocorrência do código no histórico do GitHub
         ultimo_preco = preco_novo
         forn_hist = "Sem Histórico"
         
@@ -338,7 +339,7 @@ else:
 
         st.markdown(df_display.to_html(escape=False, index=False), unsafe_allow_html=True)
 
-        # Função para Gerar PDF do Relatório com tratamento blindado
+        # Função para Gerar PDF do Relatório
         def gerar_pdf(df):
             pdf = FPDF(orientation='L', unit='mm', format='A4')
             pdf.add_page()
@@ -394,33 +395,36 @@ else:
         st.subheader("🤖 Painel Analítico & Executivo (Gerado por Gemini AI)")
         
         if st.button("✨ Executar Análise Comparativa e Montar Painel Executivo"):
-            with st.spinner("A Inteligência Artificial está processando as comparações de preços, fornecedores e montando o painel executivo..."):
-                try:
-                    client = genai.Client(api_key=GEMINI_API_KEY)
-                    
-                    resumo_dados = df_final[['Código', 'Descrição Resumida', 'Qtd', 'Último Preço Hist. (R$)', 'Fornecedor do Último Preço', 'Novo Preço Unit. (R$)', 'Fornecedor do Preço Novo', 'Variação (Δ%)', 'Tendência']].to_string()
-                    
-                    prompt = (
-                        "Atue como um Especialista Sênior em Supply Chain, Gestão de Compras e Negociação Corporativa. "
-                        "Com base no mapa de cotação atual comparado estritamente ao histórico de compras abaixo:\n\n"
-                        f"{resumo_dados}\n\n"
-                        "Monte um **Painel Comparativo e Executivo** formatado em blocos claros com as seguintes seções:\n"
-                        "1. **Resumo Executivo do Cenário:** Visão geral da cotação frente ao histórico consolidado.\n"
-                        "2. **Quadro de Oportunidades (Ganhos de Margem / Reduções):** Destaque dos itens com variação favorável (queda) e os fornecedores envolvidos.\n"
-                        "3. **Matriz de Alertas e Riscos (Aumentos de Custo):** Análise crítica dos itens que apresentaram alta e diretrizes para renegociação urgente.\n"
-                        "4. **Recomendações Estratégicas Finais para Homologação:** Considerações logísticas, fiscais (ZFM) e fechamento de ordens de compra."
-                    )
-                    
-                    response = client.models.generate_content(
-                        model='gemini-2.5-flash',
-                        contents=prompt,
-                    )
-                    
-                    st.success("Painel Comparativo Estratégico gerado com sucesso!")
-                    st.markdown(response.text)
-                    
-                except Exception as e:
-                    st.error(f"Erro ao comunicar com a API do Gemini: {e}")
+            if not gemini_api_key:
+                st.warning("⚠️ Por favor, insira a sua Chave da API do Gemini na barra lateral para gerar a análise.")
+            else:
+                with st.spinner("A Inteligência Artificial está processando as comparações de preços, fornecedores e montando o painel executivo..."):
+                    try:
+                        client = genai.Client(api_key=gemini_api_key)
+                        
+                        resumo_dados = df_final[['Código', 'Descrição Resumida', 'Qtd', 'Último Preço Hist. (R$)', 'Fornecedor do Último Preço', 'Novo Preço Unit. (R$)', 'Fornecedor do Preço Novo', 'Variação (Δ%)', 'Tendência']].to_string()
+                        
+                        prompt = (
+                            "Atue como um Especialista Sênior em Supply Chain, Gestão de Compras e Negociação Corporativa. "
+                            "Com base no mapa de cotação atual comparado estritamente ao histórico de compras abaixo:\n\n"
+                            f"{resumo_dados}\n\n"
+                            "Monte um **Painel Comparativo e Executivo** formatado em blocos claros com as seguintes seções:\n"
+                            "1. **Resumo Executivo do Cenário:** Visão geral da cotação frente ao histórico consolidado.\n"
+                            "2. **Quadro de Oportunidades (Ganhos de Margem / Reduções):** Destaque dos itens com variação favorável (queda) e os fornecedores envolvidos.\n"
+                            "3. **Matriz de Alertas e Riscos (Aumentos de Custo):** Análise crítica dos itens que apresentaram alta e diretrizes para renegociação urgente.\n"
+                            "4. **Recomendações Estratégicas Finais para Homologação:** Considerações logísticas, fiscais (ZFM) e fechamento de ordens de compra."
+                        )
+                        
+                        response = client.models.generate_content(
+                            model='gemini-2.5-flash',
+                            contents=prompt,
+                        )
+                        
+                        st.success("Painel Comparativo Estratégico gerado com sucesso!")
+                        st.markdown(response.text)
+                        
+                    except Exception as e:
+                        st.error(f"Erro ao comunicar com a API do Gemini: {e}")
 
         # Bloco de Observações Técnicas (ZFM e Logística)
         st.markdown("---")
