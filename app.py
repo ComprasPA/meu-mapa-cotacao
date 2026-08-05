@@ -77,7 +77,6 @@ def formatar_brl(valor):
         val_float = float(valor)
     except:
         val_float = 0.0
-    # Formata com separador de milhar por ponto e decimal por vírgula
     return f"R$ {val_float:,.2f}".replace(',', 'X').replace('.', ',').replace('X', '.')
 
 def formatar_qtd(valor):
@@ -100,21 +99,23 @@ def extrair_numeros(codigo):
     apenas_nums = ''.join(filter(str.isdigit, str(codigo)))
     return str(int(apenas_nums)) if apenas_nums.isdigit() else str(codigo).strip()
 
-# 1. Leitura Inteligente do Histórico do GitHub
+# 1. Leitura do Histórico do GitHub
 @st.cache_data
 def carregar_historico_github():
     caminho = "historico_compras.csv"
     if os.path.exists(caminho):
         try:
-            df = pd.read_csv(caminho, header=None, dtype=str)
+            df = pd.read_csv(caminho, dtype=str)
+            df.columns = [str(c).strip() for c in df.columns]
             return df, "Conectado com sucesso ao GitHub (historico_compras.csv)"
         except Exception as e:
             return pd.DataFrame(), f"Erro ao ler historico_compras.csv: {e}"
     else:
         df = pd.DataFrame({
-            6: ['0000005177', '0000007519'],
-            10: ['203.5525', '83.3645'],
-            4: ['CAA Com. e Ind. Amaz. de Alumínio Ltda.', 'CAA Comércio Amazonense de Alumínio Ltda.']
+            'Produto': ['0000005177', '0000005177', '0000007519'],
+            'Prc Unitario': ['203.5525', '375.5800', '83.3645'],
+            'Nome Fornecedor': ['COMERCIO AMA', 'CAA COMERCIO AMAZONENSE DE ALUMINIO LTDA.', 'CAA COMERCIO'],
+            'Data': ['2026-01-10', '2026-03-15', '2026-02-01']
         })
         return df, "historico_compras.csv não encontrado. Usando dados padrão."
 
@@ -236,36 +237,61 @@ for idx, row in cotacao.iterrows():
                 preco_novo = v_limpo
                 break
 
-    match = pd.DataFrame()
-    if not historico.empty:
-        for h_idx, h_row in historico.iterrows():
-            for col_num in h_row.index:
-                val_celula = str(h_row[col_num])
-                if extrair_numeros(val_celula) == codigo_busca and codigo_busca != '':
-                    match = h_row
-                    break
-            if not match.empty:
-                break
+    # Busca rigorosa da ÚLTIMA OCORRÊNCIA CRONOLÓGICA do código do item no histórico
+    ultimo_preco = preco_novo
+    forn_hist = "Sem Histórico"
     
-    if not match.empty:
-        ultimo_preco = 0.0
-        for col_num in match.index:
-            v_teste = limpar_valor(match[col_num])
-            if v_teste > 1.0 and v_teste != qtd:
-                ultimo_preco = v_teste
+    if not historico.empty:
+        col_prod_h, col_prc_h, col_forn_h, col_data_h = None, None, None, None
+        for h_col in historico.columns:
+            h_low = str(h_col).lower()
+            if any(k in h_low for k in ['produto', 'código', 'codigo', 'sku', 'cod']): col_prod_h = h_col
+            elif any(k in h_low for k in ['prc', 'preco', 'preço', 'unit']): col_prc_h = h_col
+            elif any(k in h_low for k in ['fornece', 'nome', 'empresa']): col_forn_h = h_col
+            elif any(k in h_low for k in ['data', 'dt', 'emissão', 'movimento']): col_data_h = h_col
+            
+        match_linhas = pd.DataFrame()
+        if col_prod_h:
+            match_linhas = historico[historico[col_prod_h].astype(str).apply(extrair_numeros) == codigo_busca]
+        else:
+            indices_validos = []
+            for h_idx, h_row in historico.iterrows():
+                for c_idx, val in enumerate(h_row.values):
+                    if extrair_numeros(str(val)) == codigo_busca and codigo_busca != '':
+                        indices_validos.append(h_idx)
+                        break
+            if indices_validos:
+                match_linhas = historico.iloc[indices_validos]
                 
-        forn_hist = "Histórico Anterior"
-        for col_num in match.index:
-            t_celula = str(match[col_num])
-            if len(t_celula) > 10 and not any(char.isdigit() for char in t_celula[:3]):
-                forn_hist = t_celula
-                break
-                
-        if ultimo_preco == 0.0:
-            ultimo_preco = preco_novo
-    else:
-        ultimo_preco = preco_novo
-        forn_hist = "Sem Histórico"
+        if not match_linhas.empty:
+            # Se houver coluna de data, ordena cronologicamente para garantir que pegamos a última compra real do item
+            if col_data_h:
+                try:
+                    match_linhas = match_linhas.copy()
+                    match_linhas['data_convertida'] = pd.to_datetime(match_linhas[col_data_h], errors='coerce')
+                    match_linhas = match_linhas.sort_values(by='data_convertida', ascending=True)
+                except:
+                    pass
+                    
+            # Pega estritamente a última linha do conjunto correspondente àquele código de item
+            ultima_ocorrencia = match_linhas.iloc[-1]
+            
+            if col_prc_h:
+                ultimo_preco = limpar_valor(ultima_ocorrencia[col_prc_h])
+            else:
+                for val in ultima_ocorrencia.values:
+                    v = limpar_valor(val)
+                    if v > 1.0 and v != qtd:
+                        ultimo_preco = v
+                        
+            if col_forn_h:
+                forn_hist = str(ultima_ocorrencia[col_forn_h])
+            else:
+                for val in ultima_ocorrencia.values:
+                    t = str(val)
+                    if len(t) > 5 and not any(char.isdigit() for char in t[:3]):
+                        forn_hist = t
+                        break
         
     variacao = ((preco_novo - ultimo_preco) / ultimo_preco) * 100 if ultimo_preco > 0 else 0.0
     
@@ -307,7 +333,7 @@ colunas_exatas = [
 
 df_final = df_final[colunas_exatas]
 
-# Aplicação rigorosa da formatação visual padrão brasileiro em todas as colunas numéricas
+# Formatação visual padrão brasileiro (R$ X.XXX,XX)
 df_display = df_final.copy()
 df_display['Qtd'] = df_display['Qtd'].apply(formatar_qtd)
 df_display['Último Preço Hist. (R$)'] = df_display['Último Preço Hist. (R$)'].apply(formatar_brl)
