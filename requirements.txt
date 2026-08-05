@@ -4,3 +4,4 @@ numpy
 python-docx
 fpdf2
 openpyxl
+google-genai
