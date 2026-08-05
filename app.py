@@ -16,7 +16,6 @@ st.markdown("""
     <style>
     .main { background-color: #ffffff; }
     h1 { color: #1f2c34; font-family: 'Helvetica Neue', sans-serif; }
-    /* Estilização da tabela para simular o relatório corporativo */
     table {
         width: 100% !important;
         border-collapse: collapse !important;
@@ -28,11 +27,13 @@ st.markdown("""
         font-weight: bold !important;
         padding: 10px !important;
         border: 1px solid #dddddd !important;
+        font-size: 14px !important;
     }
     td {
-        padding: 8px !important;
+        padding: 10px !important;
         border: 1px solid #dddddd !important;
         color: #000000 !important;
+        font-size: 13px !important;
     }
     </style>
 """, unsafe_allow_html=True)
@@ -47,7 +48,7 @@ uploaded_cot = st.sidebar.file_uploader(
     type=["csv", "xlsx", "docx"]
 )
 
-# 1. Leitura do Histórico do GitHub com os dados exatos do exemplo
+# 1. Leitura do Histórico do GitHub
 @st.cache_data
 def carregar_historico_github():
     caminho = "historico_compras.csv"
@@ -207,10 +208,25 @@ for idx, row in cotacao.iterrows():
 
 df_final = pd.DataFrame(resultados)
 
+# Garantir a ordem exata das colunas solicitadas
+colunas_exatas = [
+    'Item', 
+    'Código', 
+    'Descrição Resumida', 
+    'Qtd', 
+    'Último Preço Hist. (R$)', 
+    'Fornecedor do Último Preço', 
+    'Novo Preço Unit. (R$)', 
+    'Fornecedor do Preço Novo', 
+    'Variação (Δ%)', 
+    'Tendência'
+]
+
+df_final = df_final[colunas_exatas]
+
 # Exibição estritamente customizada para refletir o design da imagem
 st.subheader("📋 Mapa de Cotação Consolidado & Comparativo Histórico")
 
-# Formatação visual exata das colunas
 st.markdown(
     df_final.style.format({
         'Qtd': '{:,.2f}',
