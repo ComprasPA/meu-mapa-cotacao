@@ -17,7 +17,7 @@ st.set_page_config(
     layout="wide"
 )
 
-# Estilização visual corporativa estilo Dados Bancários e setas coloridas
+# Estilização visual corporativa estilo Dados Bancários
 st.markdown("""
     <style>
     .main { background-color: #ffffff; }
@@ -105,6 +105,13 @@ def formatar_qtd(valor):
         val_float = 0.0
     return f"{val_float:,.2f}".replace(',', 'X').replace('.', ',').replace('X', '.')
 
+def formatar_pct(valor):
+    try:
+        val_float = float(valor)
+    except:
+        val_float = 0.0
+    return f"{val_float:+,.2f}%".replace(',', 'X').replace('.', ',').replace('X', '.')
+
 def formatar_pct_com_seta(valor):
     try:
         val_float = float(valor)
@@ -114,10 +121,8 @@ def formatar_pct_com_seta(valor):
     val_fmt = f"{val_float:+,.2f}%".replace(',', 'X').replace('.', ',').replace('X', '.')
     
     if val_float > 0:
-        # Seta vermelha para cima (Alta de preço / Desfavorável)
         return f"<span style='color: #c00000; font-weight: bold;'>↑ {val_fmt}</span>"
     elif val_float < 0:
-        # Seta verde para baixo (Queda de preço / Favorável)
         return f"<span style='color: #2ca02c; font-weight: bold;'>↓ {val_fmt}</span>"
     else:
         return f"<span style='color: #555555;'>{val_fmt}</span>"
