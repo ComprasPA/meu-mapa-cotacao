@@ -4,6 +4,7 @@ import numpy as np
 import os
 import docx
 from fpdf import FPDF
+import unicodedata
 
 # Configuração da Página
 st.set_page_config(
@@ -113,6 +114,13 @@ def extrair_numeros(codigo):
     apenas_nums = ''.join(filter(str.isdigit, str(codigo)))
     return str(int(apenas_nums)) if apenas_nums.isdigit() else str(codigo).strip()
 
+def limpar_texto_pdf(texto):
+    """Remove acentos e caracteres incompatíveis com o motor padrão do FPDF2"""
+    if not isinstance(texto, str):
+        texto = str(texto)
+    nfkd_form = unicodedata.normalize('NFKD', texto)
+    return "".join([c for c in nfkd_form if not unicodedata.combining(c)])
+
 # 1. Leitura do Histórico do GitHub
 @st.cache_data
 def carregar_historico_github():
@@ -134,7 +142,7 @@ def carregar_historico_github():
 historico, status_historico = carregar_historico_github()
 st.sidebar.info(f"ℹ️ **Status:** {status_historico}")
 
-# 2. Leitura inteligente e blindada de arquivos DOCX do TOTVS
+# 2. Leitura inteligente de arquivos DOCX do TOTVS
 def extrair_tabela_docx_inteligente(arquivo_docx):
     try:
         doc = docx.Document(arquivo_docx)
@@ -325,12 +333,12 @@ else:
 
     st.markdown(df_display.to_html(escape=False, index=False), unsafe_allow_html=True)
 
-    # Função para Gerar PDF do Relatório com retorno estrito em bytes
+    # Função para Gerar PDF do Relatório com tratamento blindado de caracteres especiais
     def gerar_pdf(df):
         pdf = FPDF(orientation='L', unit='mm', format='A4')
         pdf.add_page()
         pdf.set_font("helvetica", "B", 14)
-        pdf.cell(0, 10, "Mapa de Cotacao & Comparativo Historico - Suprimentos", 0, 1, "C")
+        pdf.cell(0, 10, limpar_texto_pdf("Mapa de Cotacao & Comparativo Historico - Suprimentos"), 0, 1, "C")
         pdf.ln(5)
         
         pdf.set_font("helvetica", "B", 8)
@@ -342,21 +350,21 @@ else:
         ]
         
         for i, h in enumerate(headers):
-            pdf.cell(col_widths[i], 7, h, 1, 0, "C")
+            pdf.cell(col_widths[i], 7, limpar_texto_pdf(h), 1, 0, "C")
         pdf.ln()
         
         pdf.set_font("helvetica", "", 7)
         for _, row in df.iterrows():
-            pdf.cell(col_widths[0], 6, str(row['Item']), 1, 0, "C")
-            pdf.cell(col_widths[1], 6, str(row['Código']), 1, 0, "C")
-            pdf.cell(col_widths[2], 6, str(row['Descrição Resumida'])[:35], 1, 0, "L")
-            pdf.cell(col_widths[3], 6, str(row['Qtd']), 1, 0, "R")
-            pdf.cell(col_widths[4], 6, formatar_brl(row['Último Preço Hist. (R$)']), 1, 0, "R")
-            pdf.cell(col_widths[5], 6, str(row['Fornecedor do Último Preço'])[:25], 1, 0, "L")
-            pdf.cell(col_widths[6], 6, formatar_brl(row['Novo Preço Unit. (R$)']), 1, 0, "R")
-            pdf.cell(col_widths[7], 6, str(row['Fornecedor do Preço Novo'])[:25], 1, 0, "L")
-            pdf.cell(col_widths[8], 6, formatar_pct(row['Variação (Δ%)']), 1, 0, "R")
-            pdf.cell(col_widths[9], 6, str(row['Tendência']), 1, 0, "C")
+            pdf.cell(col_widths[0], 6, limpar_texto_pdf(str(row['Item'])), 1, 0, "C")
+            pdf.cell(col_widths[1], 6, limpar_texto_pdf(str(row['Código'])), 1, 0, "C")
+            pdf.cell(col_widths[2], 6, limpar_texto_pdf(str(row['Descrição Resumida'])[:35]), 1, 0, "L")
+            pdf.cell(col_widths[3], 6, limpar_texto_pdf(str(row['Qtd'])), 1, 0, "R")
+            pdf.cell(col_widths[4], 6, limpar_texto_pdf(formatar_brl(row['Último Preço Hist. (R$)'])), 1, 0, "R")
+            pdf.cell(col_widths[5], 6, limpar_texto_pdf(str(row['Fornecedor do Último Preço'])[:25]), 1, 0, "L")
+            pdf.cell(col_widths[6], 6, limpar_texto_pdf(formatar_brl(row['Novo Preço Unit. (R$)'])), 1, 0, "R")
+            pdf.cell(col_widths[7], 6, limpar_texto_pdf(str(row['Fornecedor do Preço Novo'])[:25]), 1, 0, "L")
+            pdf.cell(col_widths[8], 6, limpar_texto_pdf(formatar_pct(row['Variação (Δ%)'])), 1, 0, "R")
+            pdf.cell(col_widths[9], 6, limpar_texto_pdf(str(row['Tendência'])), 1, 0, "C")
             pdf.ln()
             
         pdf_output = pdf.output(dest='S')
