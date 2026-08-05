@@ -3,5 +3,5 @@ pandas
 numpy
 python-docx
 fpdf2
-openpyxl
 beautifulsoup4
+openpyxl
