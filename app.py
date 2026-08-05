@@ -1,6 +1,7 @@
-import streamlit as pd_st # Usando alias para evitar conflito com pandas
+import streamlit as pd_st
 import pandas as pd
 import numpy as np
+import os
 
 # Configuração da Página
 pd_st.set_page_config(
@@ -21,15 +22,41 @@ pd_st.markdown("""
 pd_st.title("📊 Gestão Estratégica de Suprimentos | Mapa de Cotação & Histórico")
 pd_st.markdown("Plataforma analítica para homologação de preços, variação de custos e tomada de decisão comercial.")
 
-# Sidebar para upload de dados
+# Sidebar para upload de dados ou leitura do GitHub
 pd_st.sidebar.header("📁 Fontes de Dados")
 uploaded_file = pd_st.sidebar.file_uploader("Carregar Mapa de Cotação Atual (.csv ou .xlsx)", type=["csv", "xlsx"])
-uploaded_history = pd_st.sidebar.file_uploader("Carregar Histórico de Compras (.csv ou .xlsx)", type=["csv", "xlsx"])
+uploaded_history = pd_st.sidebar.file_uploader("Carregar Histórico de Compras Opcional (.csv ou .xlsx)", type=["csv", "xlsx"])
 
-# Dados Mockados para demonstração imediata caso o usuário não envie arquivos
-def carregar_dados_exemplo():
-    # Histórico simulado
-    hist_data = pd.DataFrame({
+# Função para carregar dados padrão ou do repositório GitHub
+def carregar_dados():
+    # Caminho padrão no GitHub
+    caminho_git_hist = "historico_compras.csv"
+    
+    if uploaded_history is not None:
+        if uploaded_history.name.endswith('.csv'):
+            hist_data = pd.read_csv(uploaded_history)
+        else:
+            hist_data = pd.read_excel(uploaded_history)
+    elif os.path.exists(caminho_git_hist):
+        try:
+            hist_data = pd.read_csv(caminho_git_hist)
+        except Exception:
+            hist_data = gerar_hist_mock()
+    else:
+        hist_data = gerar_hist_mock()
+        
+    if uploaded_file is not None:
+        if uploaded_file.name.endswith('.csv'):
+            cot_data = pd.read_csv(uploaded_file)
+        else:
+            cot_data = pd.read_excel(uploaded_file)
+    else:
+        cot_data = gerar_cot_mock()
+        
+    return hist_data, cot_data
+
+def gerar_hist_mock():
+    return pd.DataFrame({
         'Código': ['SKU001', 'SKU001', 'SKU002', 'SKU003', 'SKU003'],
         'Data': ['2025-10-15', '2026-02-10', '2026-01-20', '2025-11-05', '2026-03-12'],
         'Item': ['Luva de Raspa', 'Luva de Raspa', 'Bobina Térmica 80x40', 'Terminal Tubular', 'Terminal Tubular'],
@@ -39,9 +66,9 @@ def carregar_dados_exemplo():
         'Fornecedor': ['EPI Manaus Comércio', 'Industrial Sul Ltda', 'Papelaria & Cia', 'Conexões Amazônia', 'Global Elétrica SP'],
         'Origem': ['Local (Manaus)', 'Fora do Estado', 'Local (Manaus)', 'Local (Manaus)', 'Fora do Estado']
     })
-    
-    # Cotação nova simulada
-    cot_data = pd.DataFrame({
+
+def gerar_cot_mock():
+    return pd.DataFrame({
         'Item': ['Luva de Raspa', 'Bobina Térmica 80x40', 'Terminal Tubular'],
         'Código': ['SKU001', 'SKU002', 'SKU003'],
         'Descrição Resumida': ['Luva raspa couro cano curto', 'Bobina papel térmico cx c/ 30', 'Terminal tubular 2.5mm pct 100un'],
@@ -50,30 +77,17 @@ def carregar_dados_exemplo():
         'Fornecedor do Preço Novo': ['EPI Manaus Comércio', 'Papelaria & Cia', 'Metaltec Suprimentos'],
         'Origem Novo': ['Local (Manaus)', 'Local (Manaus)', 'Fora do Estado']
     })
-    return hist_data, cot_data
 
-# Carregamento efetivo
-if uploaded_file is not None and uploaded_history is not None:
-    if uploaded_file.name.endswith('.csv'):
-        cot_data = pd.read_csv(uploaded_file)
-    else:
-        cot_data = pd.read_excel(uploaded_file)
-        
-    if uploaded_history.name.endswith('.csv'):
-        hist_data = pd.read_csv(uploaded_history)
-    else:
-        hist_data = pd.read_excel(uploaded_history)
-else:
-    pd_st.sidebar.info("Exibindo dados de demonstração. Faça o upload dos seus arquivos para análise real.")
-    hist_data, cot_data = carregar_dados_exemplo()
+hist_data, cot_data = carregar_dados()
 
-# Processamento do Comparativo Histórico
+# Processamento do Comparativo Histórico na ordem exata solicitada
 def processar_comparativo(historico, cotacao):
     resultado = []
     
-    # Ordenar histórico por data decrescente para pegar sempre a compra anterior mais recente
-    historico['Data'] = pd.to_datetime(historico['Data'])
-    historico = historico.sort_values(by='Data', ascending=False)
+    # Garantir tratamento de data
+    if 'Data' in historico.columns:
+        historico['Data'] = pd.to_datetime(historico['Data'], errors='coerce')
+        historico = historico.sort_values(by='Data', ascending=False)
     
     for _, row in cotacao.iterrows():
         codigo = row['Código']
@@ -83,15 +97,12 @@ def processar_comparativo(historico, cotacao):
         preco_novo = row['Novo Preço Unit. (R$)']
         forn_novo = row['Fornecedor do Preço Novo']
         
-        # Filtrar histórico do item
         hist_item = historico[historico['Código'] == codigo]
         
         if not hist_item.empty:
             ultimo_preco_hist = hist_item.iloc[0]['Preço Unit. (R$)']
-            forn_hist = hist_item.iloc[0]['Fornecedor']
         else:
             ultimo_preco_hist = preco_novo
-            forn_hist = "Sem Histórico"
             
         # Cálculo de Variação (Δ%)
         if ultimo_preco_hist > 0:
@@ -113,54 +124,61 @@ def processar_comparativo(historico, cotacao):
             'Descrição Resumida': desc,
             'Qtd': qtd_novo,
             'Último Preço Hist. (R$)': round(ultimo_preco_hist, 2),
-            'Fornecedor do Último Preço': forn_hist,
+            'Fornecedor do Último Preço': hist_item.iloc[0]['Fornecedor'] if not hist_item.empty else "Sem Histórico",
             'Novo Preço Unit. (R$)': round(preco_novo, 2),
             'Fornecedor do Preço Novo': forn_novo,
             'Variação (Δ%)': round(variacao, 2),
             'Tendência': tendencia
         })
         
-    return pd.DataFrame(resultado)
+    df_res = pd.DataFrame(resultado)
+    
+    # Ordem rigorosa exigida:
+    colunas_ordenadas = [
+        'Item', 'Código', 'Descrição Resumida', 'Qtd', 
+        'Último Preço Hist. (R$)', 'Fornecedor do Último Preço', 
+        'Novo Preço Unit. (R$)', 'Fornecedor do Preço Novo', 
+        'Variação (Δ%)', 'Tendência'
+    ]
+    
+    return df_res[colunas_ordenadas]
 
 df_resultado = processar_comparativo(hist_data, cot_data)
 
-# Exibição da Tabela Obrigatória
+# Exibição da Tabela Consolidada
 pd_st.subheader("📋 Mapa de Cotação Consolidado & Comparativo Histórico")
 
-# Formatando visualmente a tabela no Streamlit
 pd_st.dataframe(df_resultado.style.format({
     'Último Preço Hist. (R$)': 'R$ {:.2f}',
     'Novo Preço Unit. (R$)': 'R$ {:.2f}',
     'Variação (Δ%)': '{:+.2f}%'
 }), use_container_width=True)
 
-# Bloco de Observações Técnicas (Bullet Points)
+# Bloco de Observações Técnicas (Logística e ZFM)
 pd_st.markdown("---")
 pd_st.subheader("🔍 Observações Logísticas e Fiscais (ZFM)")
 pd_st.markdown("""
-* **Impacto Logístico:** Itens adquiridos de fornecedores 'Fora do Estado' devem ser reavaliados frente aos custos de frete aéreo/fluvial para Manaus e eventuais impactos no *lead time*.
-* **Incentivos Fiscais:** Garantir a aplicação correta dos benefícios da Zona Franca de Manaus (ZFM) em aquisições de insumos produtivos para assegurar competitividade de margem.
-* **Picos Fora da Curva:** Variações superiores a +5% exigem auditoria nas composições de custos dos insumos primários (matéria-prima e embalagem) antes da emissão da Ordem de Compra.
+* **Impacto Logístico:** Avaliação do custo total de frete (modal aéreo/fluvial) para suprimentos oriundos de 'Fora do Estado' em comparação com fornecedores de Manaus.
+* **Incentivos Fiscais:** Validação da aplicação correta dos benefícios tributários da Zona Franca de Manaus (ZFM) para preservar a margem operacional.
+* **Picos Fora da Curva:** Análise crítica obrigatória em variações superiores a +5%, verificando oscilações de matéria-prima e custos de transporte antes da emissão do pedido.
 """)
 
 # Seção Obrigatória: Insight do Especialista
 pd_st.markdown("---")
 pd_st.subheader("💡 Insight do Especialista")
 
-# Análise automática rápida para o insight
 itens_em_alta = df_resultado[df_resultado['Variação (Δ%)'] > 0]
 if not itens_em_alta.empty:
     insight_texto = (
-        f"Identificada pressão inflacionária em **{len(itens_em_alta)} item(ns)** do escopo atual. "
-        "Recomenda-se **renegociação imediata com base no histórico de volume** ou consulta a "
-        "fornecedores homologados alternativos na praça local (Manaus) para mitigar o impacto margem, "
-        "priorizando fornecedores com entrega imediata para evitar ruptura de estoque."
+        f"Detectada pressão inflacionária em **{len(itens_em_alta)} item(ns)** da cotação atual. "
+        "Recomenda-se a **renegociação imediata baseada no volume histórico de consumo** ou "
+        "o acionamento de praças alternativas na região de Manaus para otimização do custo total (preço + frete)."
     )
 else:
     insight_texto = (
-        "O cenário de preços apresenta estabilidade ou tendência de queda. "
+        "Os preços encontram-se estáveis ou em tendência de deflação. "
         "Recomenda-se a **antecipação de compras estratégicas** para garantir o abastecimento "
-        "aproveitando as condições atuais favoráveis de mercado."
+        "e fixar condições comerciais favoráveis perante a sazonalidade."
     )
 
 pd_st.success(insight_texto)
