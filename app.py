@@ -8,10 +8,11 @@ import unicodedata
 import email
 from bs4 import BeautifulSoup
 import datetime
+import time
 
 # Configuração da Página
 st.set_page_config(
-    page_title="Mapa de Cotação e Análise de Custos",
+    page_title="Meu mapa cotação - Parente Andrade",
     page_icon="📊",
     layout="wide"
 )
@@ -20,7 +21,15 @@ st.set_page_config(
 st.markdown("""
     <style>
     .main { background-color: #ffffff; }
-    h1 { color: #1f2c34; font-family: 'Helvetica Neue', sans-serif; }
+    h1 { color: #1f2c34; font-family: 'Helvetica Neue', sans-serif; margin-bottom: 0px; }
+    .subtitle-empresa {
+        color: #205081;
+        font-size: 18px;
+        font-weight: bold;
+        font-family: 'Helvetica Neue', sans-serif;
+        margin-top: 0px;
+        margin-bottom: 25px;
+    }
     table { width: 100% !important; border-collapse: collapse !important; }
     th {
         background-color: #205081 !important;
@@ -44,14 +53,11 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-st.title("📊 Gestão Estratégica de Suprimentos | Mapa de Cotação & Histórico")
+st.title("📊 Meu mapa cotação")
+st.markdown('<p class="subtitle-empresa">Parente Andrade</p>', unsafe_allow_html=True)
 st.markdown("Plataforma analítica para homologação de preços, variação de custos e tomada de decisão comercial.")
 
-# Gerenciamento de Estado
-if 'limpar_cache' not in st.session_state:
-    st.session_state.limpar_cache = False
-
-# Barra lateral para upload e ações de controle
+# Barra lateral para upload de arquivos
 st.sidebar.header("📁 Fontes de Dados")
 uploaded_cot = st.sidebar.file_uploader(
     "Carregar Mapa de Cotação (.csv, .xlsx, .docx ou .mhtml)", 
@@ -59,13 +65,6 @@ uploaded_cot = st.sidebar.file_uploader(
 )
 
 st.sidebar.markdown("---")
-st.sidebar.header("⚙️ Ações e Ferramentas")
-
-if st.sidebar.button("🧹 Limpar Histórico / Cache"):
-    st.cache_data.clear()
-    st.session_state.clear()
-    st.sidebar.success("Cache e histórico limpos com sucesso!")
-    st.rerun()
 
 # Funções de Conversão e Formatação Padrão Brasileiro Rigoroso (X.XXX,XX)
 def limpar_valor(valor):
@@ -127,7 +126,7 @@ def limpar_texto_pdf(texto):
     texto_sem_acento = "".join([c for c in nfkd_form if not unicodedata.combining(c)])
     return texto_sem_acento.encode('latin-1', 'replace').decode('latin-1')
 
-# 1. Leitura do Histórico do GitHub com exibição apenas da data de atualização
+# 1. Leitura do Histórico do GitHub com exibição no formato solicitado
 @st.cache_data
 def carregar_historico_github():
     caminho = "historico_compras.csv"
@@ -136,7 +135,7 @@ def carregar_historico_github():
             df = pd.read_csv(caminho, header=None, dtype=str)
             mod_time = os.path.getmtime(caminho)
             data_atualizacao = datetime.datetime.fromtimestamp(mod_time).strftime('%d/%m/%Y')
-            return df, f"Atualizado em: {data_atualizacao}"
+            return df, f"base de dados atualizada em: {data_atualizacao}"
         except Exception as e:
             return pd.DataFrame(), f"Erro ao ler historico_compras.csv: {e}"
     else:
@@ -145,7 +144,7 @@ def carregar_historico_github():
             6: ['0000005177'],                              
             10: ['375.58']                                   
         })
-        return df, "historico_compras.csv não encontrado. Usando dados padrão."
+        return df, "base de dados atualizada em: Indisponível"
 
 historico, status_historico = carregar_historico_github()
 st.sidebar.info(f"ℹ️ **Status:** {status_historico}")
@@ -237,6 +236,11 @@ def extrair_tabela_docx_limpa(arquivo_docx):
 # O painel permanece limpo se nenhum arquivo for enviado
 cotacao = pd.DataFrame()
 if uploaded_cot is not None:
+    # Barra de progresso durante o carregamento e processamento
+    progress_bar = st.progress(0, text="Iniciando processamento do arquivo...")
+    time.sleep(0.2)
+    progress_bar.progress(30, text="Lendo dados da cotação...")
+    
     nome = uploaded_cot.name.lower()
     try:
         if nome.endswith('.csv'):
@@ -247,9 +251,16 @@ if uploaded_cot is not None:
             cotacao = extrair_tabela_docx_limpa(uploaded_cot)
         elif nome.endswith(('.mhtml', '.html', '.mht')):
             cotacao = extrair_tabela_mhtml(uploaded_cot)
+            
+        progress_bar.progress(70, text="Cruzando dados com o histórico...")
+        time.sleep(0.2)
     except Exception as e:
         st.error(f"Erro ao ler arquivo: {e}")
         cotacao = pd.DataFrame()
+        
+    progress_bar.progress(100, text="Processamento concluído!")
+    time.sleep(0.3)
+    progress_bar.empty()
 
 # Se nenhum arquivo foi carregado ou a tabela estiver vazia, exibe instrução inicial
 if cotacao.empty:
