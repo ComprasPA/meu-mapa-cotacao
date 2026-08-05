@@ -17,7 +17,7 @@ st.set_page_config(
     layout="wide"
 )
 
-# Estilização visual corporativa
+# Estilização visual corporativa com o estilo "Dados Bancários" (Azul Excel)
 st.markdown("""
     <style>
     .main { background-color: #ffffff; }
@@ -30,24 +30,36 @@ st.markdown("""
         margin-top: 0px;
         margin-bottom: 25px;
     }
-    table { width: 100% !important; border-collapse: collapse !important; }
-    th {
-        background-color: #205081 !important;
+    
+    /* Estilização da Tabela no Estilo Dados Bancários */
+    .dataframe {
+        width: 100% !important;
+        border-collapse: collapse !important;
+        font-family: 'Helvetica Neue', sans-serif !important;
+    }
+    .dataframe th {
+        background-color: #2f5597 !important; /* Azul corporativo estilo Dados Bancários do Excel */
         color: white !important;
         text-align: center !important;
         font-weight: bold !important;
         padding: 10px !important;
-        border: 1px solid #dddddd !important;
-        font-size: 14px !important;
+        border: 1px solid #b4c6e7 !important;
+        font-size: 13px !important;
     }
-    td {
-        padding: 10px !important;
-        border: 1px solid #dddddd !important;
+    .dataframe td {
+        padding: 9px 10px !important;
+        border: 1px solid #d9d9d9 !important;
         color: #000000 !important;
         font-size: 13px !important;
         text-align: right;
     }
-    td:nth-child(1), td:nth-child(2), td:nth-child(3), td:nth-child(6), td:nth-child(8), td:nth-child(10) {
+    .dataframe tr:nth-child(even) {
+        background-color: #f2f5f9 !important; /* Linhas zebradas em tom azul bem suave */
+    }
+    .dataframe tr:nth-child(odd) {
+        background-color: #ffffff !important;
+    }
+    .dataframe td:nth-child(1), .dataframe td:nth-child(2), .dataframe td:nth-child(3), .dataframe td:nth-child(6), .dataframe td:nth-child(8), .dataframe td:nth-child(10) {
         text-align: left;
     }
     </style>
@@ -388,27 +400,32 @@ else:
         df_display['Novo Preço Unit. (R$)'] = df_display['Novo Preço Unit. (R$)'].apply(formatar_brl)
         df_display['Variação (Δ%)'] = df_display['Variação (Δ%)'].apply(formatar_pct)
 
-        # Exibição do painel interativo formatado
+        # Exibição do painel interativo formatado com classe CSS 'dataframe' (Estilo Dados Bancários)
         st.subheader("📋 Mapa de Cotação Consolidado & Comparativo Histórico")
 
-        st.markdown(df_display.to_html(escape=False, index=False), unsafe_allow_html=True)
+        # Converte para HTML adicionando a classe CSS para aplicar o estilo Dados Bancários
+        html_tabela = df_display.to_html(escape=False, index=False, classes='dataframe')
+        st.markdown(html_tabela, unsafe_allow_html=True)
 
-        # Configuração da Classe do PDF Profissional
+        # Configuração da Classe do PDF Profissional com Margens Exatas (Esq/Dir: 3cm, Sup/Inf: 2.5cm)
         class PDFProfissional(FPDF):
+            def __init__(self):
+                super().__init__(orientation='L', unit='mm', format='A4')
+                self.set_margins(left=30, top=25, right=30)
+                self.set_auto_page_break(auto=True, margin=25)
+
             def header(self):
-                # Fundo do cabeçalho
-                self.set_fill_color(32, 80, 129) # Azul Corporativo
-                self.rect(0, 0, 297, 28, 'F')
+                self.set_fill_color(47, 85, 151) # Azul Dados Bancários (#2f5597)
+                self.rect(30, 10, 237, 22, 'F')
                 
-                # Títulos
-                self.set_font("helvetica", "B", 16)
+                self.set_font("helvetica", "B", 15)
                 self.set_text_color(255, 255, 255)
-                self.set_y(8)
-                self.cell(0, 8, limpar_texto_pdf("Mapa de Cotacao & Comparativo Historico"), 0, 1, "C")
+                self.set_xy(30, 12)
+                self.cell(237, 7, limpar_texto_pdf("Mapa de Cotacao & Comparativo Historico"), 0, 1, "C")
                 
-                self.set_font("helvetica", "", 11)
-                self.set_y(16)
-                self.cell(0, 8, limpar_texto_pdf("Gestao Estrategica de Suprimentos | Parente Andrade"), 0, 1, "C")
+                self.set_font("helvetica", "", 10)
+                self.set_xy(30, 19)
+                self.cell(237, 6, limpar_texto_pdf("Gestao Estratégica de Compras | Parente Andrade"), 0, 1, "C")
                 self.ln(12)
 
             def footer(self):
@@ -418,13 +435,12 @@ else:
                 data_hora = datetime.datetime.now().strftime("%d/%m/%Y %H:%M")
                 self.cell(0, 10, limpar_texto_pdf(f"Gerado em {data_hora} | Pagina {self.page_no()}"), 0, 0, "C")
 
-        # Função para Gerar PDF do Relatório
+        # Função para Gerar PDF do Relatório com colunas ajustadas à largura útil
         def gerar_pdf(df):
-            pdf = PDFProfissional(orientation='L', unit='mm', format='A4')
+            pdf = PDFProfissional()
             pdf.add_page()
             
-            # Larguras das colunas
-            col_widths = [12, 23, 63, 12, 22, 50, 22, 50, 16, 18]
+            col_widths = [12, 23, 62, 12, 22, 50, 22, 50, 18, 16]
             headers = [
                 "Item", "Codigo", "Descricao", "Qtd", 
                 "Ult. Preco", "Forn. Ant.", "Novo Preco", 
@@ -432,7 +448,7 @@ else:
             ]
             
             # Cabeçalho da Tabela
-            pdf.set_fill_color(32, 80, 129)
+            pdf.set_fill_color(47, 85, 151) # Azul Dados Bancários
             pdf.set_text_color(255, 255, 255)
             pdf.set_font("helvetica", "B", 8)
             
@@ -440,20 +456,17 @@ else:
                 pdf.cell(col_widths[i], 8, limpar_texto_pdf(h), border=1, fill=True, align="C")
             pdf.ln()
             
-            # Dados da Tabela com efeito zebrado
+            # Dados da Tabela com efeito zebrado em tom azul suave
             pdf.set_font("helvetica", "", 7)
             
             fill = False
             for _, row in df.iterrows():
-                # Define cor da linha (Zebrado)
                 if fill:
-                    pdf.set_fill_color(240, 245, 250) # Azul bem clarinho
+                    pdf.set_fill_color(242, 245, 249) # Tom azul suave estilo Dados Bancários
                 else:
-                    pdf.set_fill_color(255, 255, 255) # Branco
+                    pdf.set_fill_color(255, 255, 255)
                     
                 pdf.set_text_color(0, 0, 0)
-                
-                # Validação de cor para Variação (Verde/Vermelho)
                 var_val = row['Variação (Δ%)']
                 tendencia = str(row['Tendência'])
                 
@@ -466,19 +479,18 @@ else:
                 pdf.cell(col_widths[6], 7, limpar_texto_pdf(formatar_brl(row['Novo Preço Unit. (R$)'])), border=1, fill=fill, align="R")
                 pdf.cell(col_widths[7], 7, limpar_texto_pdf(str(row['Fornecedor do Preço Novo'])[:25]), border=1, fill=fill, align="L")
                 
-                # Célula de Variação com cor
                 if var_val < 0:
-                    pdf.set_text_color(0, 128, 0) # Verde
+                    pdf.set_text_color(0, 128, 0)
                 elif var_val > 0:
-                    pdf.set_text_color(200, 0, 0) # Vermelho
+                    pdf.set_text_color(200, 0, 0)
                 else:
-                    pdf.set_text_color(0, 0, 0) # Preto
+                    pdf.set_text_color(0, 0, 0)
                 
                 pdf.cell(col_widths[8], 7, limpar_texto_pdf(formatar_pct(var_val)), border=1, fill=fill, align="R")
                 pdf.cell(col_widths[9], 7, limpar_texto_pdf(tendencia), border=1, fill=fill, align="C")
                 
                 pdf.ln()
-                fill = not fill # Alterna o preenchimento para a próxima linha
+                fill = not fill
                 
             pdf_output = pdf.output(dest='S')
             if isinstance(pdf_output, str):
