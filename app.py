@@ -43,6 +43,10 @@ st.markdown("""
 st.title("📊 Gestão Estratégica de Suprimentos | Mapa de Cotação & Histórico")
 st.markdown("Plataforma analítica para homologação de preços, variação de custos e tomada de decisão comercial.")
 
+# Gerenciamento de Estado para Limpar Histórico/Sessão
+if 'limpar_cache' not in st.session_state:
+    st.session_state.limpar_cache = False
+
 # Barra lateral para upload e ações de controle
 st.sidebar.header("📁 Fontes de Dados")
 uploaded_cot = st.sidebar.file_uploader(
@@ -160,25 +164,7 @@ def extrair_tabela_docx_inteligente(arquivo_docx):
         return pd.DataFrame(dados, columns=headers)
     return pd.DataFrame()
 
-@st.cache_data
-def carregar_cotacao_padrao():
-    return pd.DataFrame({
-        'Item': ['0001', '0002'],
-        'Código': ['0000005177', '0000007519'],
-        'Descrição Resumida': [
-            'PAINEL DIVIS CEGO MAD AGLOM BG 1200X2110MM', 
-            'FECHADURA CILINDRO INOX POLIDO PORTA DIVIS CHAV/BOTAO 90MM'
-        ],
-        'Qtd': [15.00, 2.00],
-        'Vlr. Unitário': [183.62, 70.07],
-        'Fornecedor': [
-            'CENTRO DO ALUMINIO INDUSTRIA E COMERCIO DE FERRAGENS, FERRAM', 
-            'CENTRO DO ALUMINIO INDUSTRIA E COMERCIO DE FERRAGENS, FERRAM'
-        ]
-    })
-
-cotacao = pd.DataFrame()
-
+# O painel permanece limpo se nenhum arquivo for enviado
 if uploaded_cot is not None:
     nome = uploaded_cot.name.lower()
     try:
@@ -188,223 +174,224 @@ if uploaded_cot is not None:
             cotacao = pd.read_excel(uploaded_cot)
         elif nome.endswith('.docx'):
             cotacao = extrair_tabela_docx_inteligente(uploaded_cot)
-            if cotacao.empty:
-                cotacao = carregar_cotacao_padrao()
     except Exception as e:
-        st.sidebar.error(f"Erro ao ler arquivo: {e}")
-        cotacao = carregar_cotacao_padrao()
+        st.error(f"Erro ao ler arquivo: {e}")
+        cotacao = pd.DataFrame()
 else:
-    cotacao = carregar_cotacao_padrao()
+    cotacao = pd.DataFrame()
 
-cotacao.columns = [str(c).strip() for c in cotacao.columns]
+# Se nenhum arquivo foi carregado, exibe apenas a instrução inicial limpa
+if cotacao.empty:
+    st.info("👈 Por favor, faça o upload do seu Mapa de Cotação Atual (.csv, .xlsx ou .docx) na barra lateral para iniciar a análise.")
+else:
+    cotacao.columns = [str(c).strip() for c in cotacao.columns]
 
-def identificar_colunas_docx(df):
-    col_item, col_cod, col_desc, col_qtd, col_vlr, col_forn = None, None, None, None, None, None
-    
-    for col in df.columns:
-        c_low = col.lower()
-        if 'item' in c_low and not col_item: col_item = col
-        elif any(k in c_low for k in ['cód', 'cod', 'sku']) and not col_cod: col_cod = col
-        elif any(k in c_low for k in ['descri', 'produto', 'material']) and not col_desc: col_desc = col
-        elif any(k in c_low for k in ['qtd', 'quant']) and not col_qtd: col_qtd = col
-        elif any(k in c_low for k in ['vlr', 'unit', 'preço', 'preco']) and not col_vlr: col_vlr = col
-        elif any(k in c_low for k in ['fornecedor', 'empresa', 'razão']) and not col_forn: col_forn = col
-
-    if not col_cod or not col_vlr:
+    def identificar_colunas_docx(df):
+        col_item, col_cod, col_desc, col_qtd, col_vlr, col_forn = None, None, None, None, None, None
+        
         for col in df.columns:
-            amostra = " ".join(df[col].astype(str).values).lower()
-            if not col_cod and any(digitos.isdigit() and len(digitos) >= 4 for digitos in df[col].astype(str)):
-                col_cod = col
-            if not col_vlr and 'r$' in amostra:
-                col_vlr = col
-                
-    return col_item, col_cod, col_desc, col_qtd, col_vlr, col_forn
+            c_low = col.lower()
+            if 'item' in c_low and not col_item: col_item = col
+            elif any(k in c_low for k in ['cód', 'cod', 'sku']) and not col_cod: col_cod = col
+            elif any(k in c_low for k in ['descri', 'produto', 'material']) and not col_desc: col_desc = col
+            elif any(k in c_low for k in ['qtd', 'quant']) and not col_qtd: col_qtd = col
+            elif any(k in c_low for k in ['vlr', 'unit', 'preço', 'preco']) and not col_vlr: col_vlr = col
+            elif any(k in c_low for k in ['fornecedor', 'empresa', 'razão']) and not col_forn: col_forn = col
 
-c_item, c_cod, c_desc, c_qtd, c_vlr, c_forn = identificar_colunas_docx(cotacao)
-
-resultados = []
-
-for idx, row in cotacao.iterrows():
-    linha_texto = " ".join([str(v) for v in row.values]).lower()
-    if 'total' in linha_texto and not c_cod:
-        continue
-
-    num_item = str(row[c_item] if c_item and pd.notna(row[c_item]) else f"{idx+1:04d}").zfill(4)
-    codigo_original = str(row[c_cod] if c_cod and pd.notna(row[c_cod]) else f"SKU{idx+1}")
-    codigo_busca = extrair_numeros(codigo_original)
-    
-    desc = str(row[c_desc] if c_desc and pd.notna(row[c_desc]) else 'Descrição não informada')
-    qtd = limpar_valor(row[c_qtd] if c_qtd and pd.notna(row[c_qtd]) else 1)
-    preco_novo = limpar_valor(row[c_vlr] if c_vlr and pd.notna(row[c_vlr]) else 0)
-    forn_novo = str(row[c_forn] if c_forn and pd.notna(row[c_forn]) else 'Fornecedor não informado')
-    
-    if preco_novo == 0.0:
-        for val in row.values:
-            v_limpo = limpar_valor(val)
-            if v_limpo > 0 and v_limpo != qtd:
-                preco_novo = v_limpo
-                break
-
-    ultimo_preco = preco_novo
-    forn_hist = "Sem Histórico"
-    
-    if not historico.empty:
-        match_linhas = []
-        for h_idx, h_row in historico.iterrows():
-            for col_idx in h_row.index:
-                val_celula = str(h_row[col_idx])
-                if extrair_numeros(val_celula) == codigo_busca and codigo_busca != '':
-                    match_linhas.append(h_row)
-                    break
+        if not col_cod or not col_vlr:
+            for col in df.columns:
+                amostra = " ".join(df[col].astype(str).values).lower()
+                if not col_cod and any(digitos.isdigit() and len(digitos) >= 4 for digitos in df[col].astype(str)):
+                    col_cod = col
+                if not col_vlr and 'r$' in amostra:
+                    col_vlr = col
                     
-        if match_linhas:
-            ultima_ocorrencia = match_linhas[-1]
-            try:
-                preco_hist_col = limpar_valor(ultima_ocorrencia.get(10, 0))
-                if preco_hist_col > 0:
-                    ultimo_preco = preco_hist_col
-                else:
-                    for val in ultima_ocorrencia.values:
-                        v = limpar_valor(val)
-                        if v > 1.0 and v != qtd:
-                            ultimo_preco = v
-                            break
-            except:
-                pass
-                
-            try:
-                forn_col = str(ultima_ocorrencia.get(4, ""))
-                if len(forn_col) > 3 and forn_col.lower() not in ['nan', 'a vista', '25 dias']:
-                    forn_hist = forn_col
-                else:
-                    for val in ultima_ocorrencia.values:
-                        t = str(val)
-                        if len(t) > 5 and not any(char.isdigit() for char in t[:3]) and t.lower() not in ['a vista', '25 dias']:
-                            forn_hist = t
-                            break
-            except:
-                pass
+        return col_item, col_cod, col_desc, col_qtd, col_vlr, col_forn
+
+    c_item, c_cod, c_desc, c_qtd, c_vlr, c_forn = identificar_colunas_docx(cotacao)
+
+    resultados = []
+
+    for idx, row in cotacao.iterrows():
+        linha_texto = " ".join([str(v) for v in row.values]).lower()
+        if 'total' in linha_texto and not c_cod:
+            continue
+
+        num_item = str(row[c_item] if c_item and pd.notna(row[c_item]) else f"{idx+1:04d}").zfill(4)
+        codigo_original = str(row[c_cod] if c_cod and pd.notna(row[c_cod]) else f"SKU{idx+1}")
+        codigo_busca = extrair_numeros(codigo_original)
         
-    variacao = ((preco_novo - ultimo_preco) / ultimo_preco) * 100 if ultimo_preco > 0 else 0.0
-    
-    if variacao < 0:
-        tendencia = "Queda (Favorável)"
-    elif variacao > 0:
-        tendencia = "Alta (Desfavorável)"
-    else:
-        tendencia = "Estabilidade"
+        desc = str(row[c_desc] if c_desc and pd.notna(row[c_desc]) else 'Descrição não informada')
+        qtd = limpar_valor(row[c_qtd] if c_qtd and pd.notna(row[c_qtd]) else 1)
+        preco_novo = limpar_valor(row[c_vlr] if c_vlr and pd.notna(row[c_vlr]) else 0)
+        forn_novo = str(row[c_forn] if c_forn and pd.notna(row[c_forn]) else 'Fornecedor não informado')
         
-    resultados.append({
-        'Item': num_item,
-        'Código': codigo_original,
-        'Descrição Resumida': desc,
-        'Qtd': qtd,
-        'Último Preço Hist. (R$)': ultimo_preco,
-        'Fornecedor do Último Preço': forn_hist,
-        'Novo Preço Unit. (R$)': preco_novo,
-        'Fornecedor do Preço Novo': forn_novo,
-        'Variação (Δ%)': variacao,
-        'Tendência': tendencia
-    })
+        if preco_novo == 0.0:
+            for val in row.values:
+                v_limpo = limpar_valor(val)
+                if v_limpo > 0 and v_limpo != qtd:
+                    preco_novo = v_limpo
+                    break
 
-df_final = pd.DataFrame(resultados)
+        ultimo_preco = preco_novo
+        forn_hist = "Sem Histórico"
+        
+        if not historico.empty:
+            match_linhas = []
+            for h_idx, h_row in historico.iterrows():
+                for col_idx in h_row.index:
+                    val_celula = str(h_row[col_idx])
+                    if extrair_numeros(val_celula) == codigo_busca and codigo_busca != '':
+                        match_linhas.append(h_row)
+                        break
+                        
+            if match_linhas:
+                ultima_ocorrencia = match_linhas[-1]
+                try:
+                    preco_hist_col = limpar_valor(ultima_ocorrencia.get(10, 0))
+                    if preco_hist_col > 0:
+                        ultimo_preco = preco_hist_col
+                    else:
+                        for val in ultima_ocorrencia.values:
+                            v = limpar_valor(val)
+                            if v > 1.0 and v != qtd:
+                                ultimo_preco = v
+                                break
+                except:
+                    pass
+                    
+                try:
+                    forn_col = str(ultima_ocorrencia.get(4, ""))
+                    if len(forn_col) > 3 and forn_col.lower() not in ['nan', 'a vista', '25 dias']:
+                        forn_hist = forn_col
+                    else:
+                        for val in ultima_ocorrencia.values:
+                            t = str(val)
+                            if len(t) > 5 and not any(char.isdigit() for char in t[:3]) and t.lower() not in ['a vista', '25 dias']:
+                                forn_hist = t
+                                break
+                except:
+                    pass
+            
+        variacao = ((preco_novo - ultimo_preco) / ultimo_preco) * 100 if ultimo_preco > 0 else 0.0
+        
+        if variacao < 0:
+            tendencia = "Queda (Favorável)"
+        elif variacao > 0:
+            tendencia = "Alta (Desfavorável)"
+        else:
+            tendencia = "Estabilidade"
+            
+        resultados.append({
+            'Item': num_item,
+            'Código': codigo_original,
+            'Descrição Resumida': desc,
+            'Qtd': qtd,
+            'Último Preço Hist. (R$)': ultimo_preco,
+            'Fornecedor do Último Preço': forn_hist,
+            'Novo Preço Unit. (R$)': preco_novo,
+            'Fornecedor do Preço Novo': forn_novo,
+            'Variação (Δ%)': variacao,
+            'Tendência': tendencia
+        })
 
-colunas_exatas = [
-    'Item', 'Código', 'Descrição Resumida', 'Qtd', 
-    'Último Preço Hist. (R$)', 'Fornecedor do Último Preço', 
-    'Novo Preço Unit. (R$)', 'Fornecedor do Preço Novo', 
-    'Variação (Δ%)', 'Tendência'
-]
+    df_final = pd.DataFrame(resultados)
 
-df_final = df_final[colunas_exatas]
-
-df_display = df_final.copy()
-df_display['Qtd'] = df_display['Qtd'].apply(formatar_qtd)
-df_display['Último Preço Hist. (R$)'] = df_display['Último Preço Hist. (R$)'].apply(formatar_brl)
-df_display['Novo Preço Unit. (R$)'] = df_display['Novo Preço Unit. (R$)'].apply(formatar_brl)
-df_display['Variação (Δ%)'] = df_display['Variação (Δ%)'].apply(formatar_pct)
-
-# Exibição do painel interativo formatado
-st.subheader("📋 Mapa de Cotação Consolidado & Comparativo Histórico")
-
-st.markdown(df_display.to_html(escape=False, index=False), unsafe_allow_html=True)
-
-# Função para Gerar PDF do Relatório com retorno estrito em bytes
-def gerar_pdf(df):
-    pdf = FPDF(orientation='L', unit='mm', format='A4')
-    pdf.add_page()
-    pdf.set_font("helvetica", "B", 14)
-    pdf.cell(0, 10, "Mapa de Cotacao & Comparativo Historico - Suprimentos", 0, 1, "C")
-    pdf.ln(5)
-    
-    pdf.set_font("helvetica", "B", 8)
-    col_widths = [12, 22, 65, 15, 25, 45, 25, 45, 18, 20]
-    headers = [
-        "Item", "Codigo", "Descricao", "Qtd", 
-        "Ult. Preco", "Forn. Ant.", "Novo Preco", 
-        "Forn. Novo", "Var (%)", "Tendencia"
+    colunas_exatas = [
+        'Item', 'Código', 'Descrição Resumida', 'Qtd', 
+        'Último Preço Hist. (R$)', 'Fornecedor do Último Preço', 
+        'Novo Preço Unit. (R$)', 'Fornecedor do Preço Novo', 
+        'Variação (Δ%)', 'Tendência'
     ]
-    
-    for i, h in enumerate(headers):
-        pdf.cell(col_widths[i], 7, h, 1, 0, "C")
-    pdf.ln()
-    
-    pdf.set_font("helvetica", "", 7)
-    for _, row in df.iterrows():
-        pdf.cell(col_widths[0], 6, str(row['Item']), 1, 0, "C")
-        pdf.cell(col_widths[1], 6, str(row['Código']), 1, 0, "C")
-        pdf.cell(col_widths[2], 6, str(row['Descrição Resumida'])[:35], 1, 0, "L")
-        pdf.cell(col_widths[3], 6, str(row['Qtd']), 1, 0, "R")
-        pdf.cell(col_widths[4], 6, formatar_brl(row['Último Preço Hist. (R$)']), 1, 0, "R")
-        pdf.cell(col_widths[5], 6, str(row['Fornecedor do Último Preço'])[:25], 1, 0, "L")
-        pdf.cell(col_widths[6], 6, formatar_brl(row['Novo Preço Unit. (R$)']), 1, 0, "R")
-        pdf.cell(col_widths[7], 6, str(row['Fornecedor do Preço Novo'])[:25], 1, 0, "L")
-        pdf.cell(col_widths[8], 6, formatar_pct(row['Variação (Δ%)']), 1, 0, "R")
-        pdf.cell(col_widths[9], 6, str(row['Tendência']), 1, 0, "C")
+
+    df_final = df_final[colunas_exatas]
+
+    df_display = df_final.copy()
+    df_display['Qtd'] = df_display['Qtd'].apply(formatar_qtd)
+    df_display['Último Preço Hist. (R$)'] = df_display['Último Preço Hist. (R$)'].apply(formatar_brl)
+    df_display['Novo Preço Unit. (R$)'] = df_display['Novo Preço Unit. (R$)'].apply(formatar_brl)
+    df_display['Variação (Δ%)'] = df_display['Variação (Δ%)'].apply(formatar_pct)
+
+    # Exibição do painel interativo formatado
+    st.subheader("📋 Mapa de Cotação Consolidado & Comparativo Histórico")
+
+    st.markdown(df_display.to_html(escape=False, index=False), unsafe_allow_html=True)
+
+    # Função para Gerar PDF do Relatório com retorno estrito em bytes
+    def gerar_pdf(df):
+        pdf = FPDF(orientation='L', unit='mm', format='A4')
+        pdf.add_page()
+        pdf.set_font("helvetica", "B", 14)
+        pdf.cell(0, 10, "Mapa de Cotacao & Comparativo Historico - Suprimentos", 0, 1, "C")
+        pdf.ln(5)
+        
+        pdf.set_font("helvetica", "B", 8)
+        col_widths = [12, 22, 65, 15, 25, 45, 25, 45, 18, 20]
+        headers = [
+            "Item", "Codigo", "Descricao", "Qtd", 
+            "Ult. Preco", "Forn. Ant.", "Novo Preco", 
+            "Forn. Novo", "Var (%)", "Tendencia"
+        ]
+        
+        for i, h in enumerate(headers):
+            pdf.cell(col_widths[i], 7, h, 1, 0, "C")
         pdf.ln()
         
-    # Retorna o PDF gerado explicitamente em bytes compatível com o Streamlit
-    pdf_output = pdf.output(dest='S')
-    if isinstance(pdf_output, str):
-        return pdf_output.encode('latin1')
-    return bytes(pdf_output)
+        pdf.set_font("helvetica", "", 7)
+        for _, row in df.iterrows():
+            pdf.cell(col_widths[0], 6, str(row['Item']), 1, 0, "C")
+            pdf.cell(col_widths[1], 6, str(row['Código']), 1, 0, "C")
+            pdf.cell(col_widths[2], 6, str(row['Descrição Resumida'])[:35], 1, 0, "L")
+            pdf.cell(col_widths[3], 6, str(row['Qtd']), 1, 0, "R")
+            pdf.cell(col_widths[4], 6, formatar_brl(row['Último Preço Hist. (R$)']), 1, 0, "R")
+            pdf.cell(col_widths[5], 6, str(row['Fornecedor do Último Preço'])[:25], 1, 0, "L")
+            pdf.cell(col_widths[6], 6, formatar_brl(row['Novo Preço Unit. (R$)']), 1, 0, "R")
+            pdf.cell(col_widths[7], 6, str(row['Fornecedor do Preço Novo'])[:25], 1, 0, "L")
+            pdf.cell(col_widths[8], 6, formatar_pct(row['Variação (Δ%)']), 1, 0, "R")
+            pdf.cell(col_widths[9], 6, str(row['Tendência']), 1, 0, "C")
+            pdf.ln()
+            
+        pdf_output = pdf.output(dest='S')
+        if isinstance(pdf_output, str):
+            return pdf_output.encode('latin1')
+        return bytes(pdf_output)
 
-# Botão de Download em PDF na interface principal
-st.markdown("---")
-col_bt1, col_bt2 = st.columns([2, 8])
-with col_bt1:
-    pdf_bytes = gerar_pdf(df_final)
-    st.download_button(
-        label="📥 Baixar Mapa em PDF",
-        data=pdf_bytes,
-        file_name="mapa_de_cotacao_suprimentos.pdf",
-        mime="application/pdf"
-    )
+    # Botão de Download em PDF na interface principal
+    st.markdown("---")
+    col_bt1, col_bt2 = st.columns([2, 8])
+    with col_bt1:
+        pdf_bytes = gerar_pdf(df_final)
+        st.download_button(
+            label="📥 Baixar Mapa em PDF",
+            data=pdf_bytes,
+            file_name="mapa_de_cotacao_suprimentos.pdf",
+            mime="application/pdf"
+        )
 
-# Bloco de Observações Técnicas (ZFM e Logística)
-st.markdown("---")
-st.subheader("🔍 Observações Logísticas e Fiscais (ZFM)")
-st.markdown("""
-* **Impacto Logístico:** Avaliação do custo total de frete (modal aéreo/fluvial) para suprimentos oriundos de 'Fora do Estado' em comparação com fornecedores locais de Manaus.
-* **Incentivos Fiscais:** Validação da aplicação correta dos benefícios tributários da Zona Franca de Manaus (ZFM) para preservação de margem.
-* **Picos Fora da Curva:** Análise crítica obrigatória em variações superiores a +5%, verificando oscilações de matéria-prima e custos logísticos antes da emissão da O.C.
-""")
+    # Bloco de Observações Técnicas (ZFM e Logística)
+    st.markdown("---")
+    st.subheader("🔍 Observações Logísticas e Fiscais (ZFM)")
+    st.markdown("""
+    * **Impacto Logístico:** Avaliação do custo total de frete (modal aéreo/fluvial) para suprimentos oriundos de 'Fora do Estado' em comparação com fornecedores locais de Manaus.
+    * **Incentivos Fiscais:** Validação da aplicação correta dos benefícios tributários da Zona Franca de Manaus (ZFM) para preservação de margem.
+    * **Picos Fora da Curva:** Análise crítica obrigatória em variações superiores a +5%, verificando oscilações de matéria-prima e custos logísticos antes da emissão da O.C.
+    """)
 
-# Seção Obrigatória: Insight do Especialista
-st.markdown("---")
-st.subheader("💡 Insight do Especialista")
+    # Seção Obrigatória: Insight do Especialista
+    st.markdown("---")
+    st.subheader("💡 Insight do Especialista")
 
-itens_em_queda = df_final[df_final['Variação (Δ%)'] < 0]
-if not itens_em_queda.empty:
-    insight_texto = (
-        f"Identificada oportunidade expressiva de economia em **{len(itens_em_queda)} item(ns)** com redução de custos favorável. "
-        "Recomenda-se a **homologação imediata com o novo fornecedor** para captura dos ganhos de margem, "
-        "certificando-se de que os prazos de entrega e condições logísticas para Manaus atendem ao cronograma operacional."
-    )
-else:
-    insight_texto = (
-        "Cenário de alta nos preços detectado. Recomenda-se a **renegociação com base no histórico de volume** "
-        "ou busca por fornecedores alternativos na praça local para evitar impacto no orçamento."
-    )
+    itens_em_queda = df_final[df_final['Variação (Δ%)'] < 0]
+    if not itens_em_queda.empty:
+        insight_texto = (
+            f"Identificada oportunidade expressiva de economia em **{len(itens_em_queda)} item(ns)** com redução de custos favorável. "
+            "Recomenda-se a **homologação imediata com o novo fornecedor** para captura dos ganhos de margem, "
+            "certificando-se de que os prazos de entrega e condições logísticas para Manaus atendem ao cronograma operacional."
+        )
+    else:
+        insight_texto = (
+            "Cenário de alta nos preços detectado. Recomenda-se a **renegociação com base no histórico de volume** "
+            "ou busca por fornecedores alternativos na praça local para evitar impacto no orçamento."
+        )
 
-st.success(insight_texto)
+    st.success(insight_texto)
