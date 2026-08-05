@@ -111,12 +111,24 @@ with col_status:
 
 st.markdown("---")
 
-# Campo Carregar Mapa de Cotação na parte superior do app
-st.subheader("📁 Fontes de Dados")
-uploaded_cot = st.file_uploader(
-    "Carregar Mapa de Cotação (.csv, .xlsx, .docx ou .mhtml)", 
-    type=["csv", "xlsx", "docx", "mhtml", "html"]
-)
+# Caixa Oculta (Abre / Fecha) para Upload, Data Base e Temas
+with st.expander("⚙️ Abrir / Fechar Configurações (Upload, Data Base e Tema)", expanded=False):
+    col_exp1, col_exp2 = st.columns([2, 1])
+    
+    with col_exp1:
+        st.markdown("### 📁 Upload de Arquivo")
+        uploaded_cot = st.file_uploader(
+            "Carregar Mapa de Cotação (.csv, .xlsx, .docx ou .mhtml)", 
+            type=["csv", "xlsx", "docx", "mhtml", "html"]
+        )
+        
+    with col_exp2:
+        st.markdown("### 🎨 Tema do Sistema")
+        tema_selecionado = st.selectbox(
+            "Selecione o Estilo Visual",
+            ["Dados Bancários (Padrão)", "Corporativo Azul Limpo", "Modo Compacto"]
+        )
+        st.info(f"Tema ativo: **{tema_selecionado}**")
 
 st.markdown("---")
 
@@ -304,7 +316,7 @@ if uploaded_cot is not None:
             cotacao = pd.DataFrame()
 
 if cotacao.empty:
-    st.info("👆 Por favor, faça o upload do seu Mapa de Cotação (.csv, .xlsx, .docx ou .mhtml) acima para iniciar a análise.")
+    st.info("👆 Abra a caixa **⚙️ Abrir / Fechar Configurações** acima e faça o upload do seu Mapa de Cotação (.csv, .xlsx, .docx ou .mhtml) para iniciar a análise.")
 else:
     cotacao.columns = [str(c).strip() for c in cotacao.columns]
 
