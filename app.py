@@ -128,12 +128,13 @@ def formatar_pct_com_seta(valor):
     
     val_fmt = f"{val_float:+,.2f}%".replace(',', 'X').replace('.', ',').replace('X', '.')
     
+    # Seta e fonte da mesma cor (tamanho maior e negrito forte)
     if val_float > 0:
-        return f"<span style='color: #c00000; font-size: 18px; font-weight: 900; vertical-align: middle;'>↑</span> <span style='font-size: 13px; font-weight: bold;'>{val_fmt}</span>"
+        return f"<span style='color: #c00000; font-size: 16px; font-weight: 900; vertical-align: middle;'>↑ {val_fmt}</span>"
     elif val_float < 0:
-        return f"<span style='color: #2ca02c; font-size: 18px; font-weight: 900; vertical-align: middle;'>↓</span> <span style='font-size: 13px; font-weight: bold;'>{val_fmt}</span>"
+        return f"<span style='color: #2ca02c; font-size: 16px; font-weight: 900; vertical-align: middle;'>↓ {val_fmt}</span>"
     else:
-        return f"<span style='color: #555555; font-size: 13px;'>{val_fmt}</span>"
+        return f"<span style='color: #555555; font-size: 14px; font-weight: bold;'>{val_fmt}</span>"
 
 def padronizar_codigo_10_digitos(codigo):
     """Padroniza rigorosamente o código do produto com 10 dígitos, completando com zeros à esquerda"""
