@@ -12,7 +12,7 @@ import time
 
 # Configuração da Página
 st.set_page_config(
-    page_title="Meu mapa cotação - Parente Andrade",
+    page_title="Gestão Estratégica de Compras | Mapa de Cotação e Histórico",
     page_icon="📊",
     layout="wide"
 )
@@ -53,7 +53,7 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-st.title("📊 Meu mapa cotação")
+st.title("📊 Gestão Estratégica de Compras | Mapa de Cotação e Histórico")
 st.markdown('<p class="subtitle-empresa">Parente Andrade</p>', unsafe_allow_html=True)
 st.markdown("Plataforma analítica para homologação de preços, variação de custos e tomada de decisão comercial.")
 
@@ -271,7 +271,6 @@ else:
     def achar_coluna(df, termos):
         for col in df.columns:
             c_low = str(col).lower()
-            # Remove acentos para garantir compatibilidade exata na busca
             c_low_norm = "".join([c for c in unicodedata.normalize('NFKD', c_low) if not unicodedata.combining(c)])
             for t in termos:
                 t_norm = "".join([c for c in unicodedata.normalize('NFKD', t) if not unicodedata.combining(c)])
@@ -465,7 +464,7 @@ else:
         * **Picos Fora da Curva:** Análise crítica obrigatória em variações superiores a +5%, verificando oscilações de matéria-prima e custos logísticos antes da emissão da O.C.
         """)
 
-        # Seção Obrigatória: Insight Rápido do Especialista Local
+        # Seção Obrigatória: Insight Rápido do Especialista
         st.markdown("---")
         st.subheader("💡 Insight Rápido do Especialista")
 
