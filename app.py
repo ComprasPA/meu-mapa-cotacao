@@ -108,11 +108,14 @@ def formatar_pct(valor):
         val_float = 0.0
     return f"{val_float:+,.2f}%".replace(',', 'X').replace('.', ',').replace('X', '.')
 
-def extrair_numeros(codigo):
+def padronizar_codigo_10_digitos(codigo):
+    """Padroniza rigorosamente o código do produto com 10 dígitos, completando com zeros à esquerda"""
     if pd.isna(codigo):
         return ""
     apenas_nums = ''.join(filter(str.isdigit, str(codigo)))
-    return str(int(apenas_nums)) if apenas_nums.isdigit() else str(codigo).strip()
+    if apenas_nums.isdigit():
+        return apenas_nums.zfill(10)
+    return str(codigo).strip()
 
 def limpar_texto_pdf(texto):
     if not isinstance(texto, str):
@@ -230,15 +233,18 @@ else:
 
     for idx, row in cotacao.iterrows():
         num_item = str(row[c_item] if c_item and pd.notna(row[c_item]) else f"{item_contador:04d}").zfill(4)
-        codigo_original = str(row[c_cod] if c_cod and pd.notna(row[c_cod]) else f"SKU{item_contador}")
-        codigo_busca = extrair_numeros(codigo_original)
+        
+        # Aplicação rigorosa da regra de 10 dígitos com zeros à esquerda
+        raw_cod = str(row[c_cod] if c_cod and pd.notna(row[c_cod]) else f"SKU{item_contador}")
+        codigo_original = padronizar_codigo_10_digitos(raw_cod)
+        codigo_busca = codigo_original # Já possui 10 dígitos padronizados
         
         desc = str(row[c_desc] if c_desc and pd.notna(row[c_desc]) else 'Descrição não informada')
         qtd = limpar_valor(row[c_qtd] if c_qtd and pd.notna(row[c_qtd]) else 1)
         preco_novo = limpar_valor(row[c_vlr] if c_vlr and pd.notna(row[c_vlr]) else 0)
         forn_novo = str(row[c_forn] if c_forn and pd.notna(row[c_forn]) else 'Fornecedor não informado')
         
-        if codigo_original.lower() in ['código', 'codigo', 'item', 'produto', 'nan']:
+        if codigo_original.lower().replace('0', '') in ['código', 'codigo', 'item', 'produto', 'nan']:
             continue
 
         item_contador += 1
@@ -251,7 +257,8 @@ else:
             for h_idx, h_row in historico.iterrows():
                 for col_idx in h_row.index:
                     val_celula = str(h_row[col_idx])
-                    if extrair_numeros(val_celula) == codigo_busca and codigo_busca != '':
+                    # Padroniza também o código encontrado no histórico para comparar perfeitamente com 10 dígitos
+                    if padronizar_codigo_10_digitos(val_celula) == codigo_busca and codigo_busca != '0000000000':
                         match_linhas.append(h_row)
                         break
                         
@@ -339,7 +346,7 @@ else:
             pdf.ln(5)
             
             pdf.set_font("helvetica", "B", 8)
-            col_widths = [12, 22, 65, 15, 25, 45, 25, 45, 18, 20]
+            col_widths = [12, 25, 62, 15, 25, 45, 25, 45, 18, 20]
             headers = [
                 "Item", "Codigo", "Descricao", "Qtd", 
                 "Ult. Preco", "Forn. Ant.", "Novo Preco", 
