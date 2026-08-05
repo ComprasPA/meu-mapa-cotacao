@@ -127,7 +127,7 @@ def limpar_texto_pdf(texto):
     texto_sem_acento = "".join([c for c in nfkd_form if not unicodedata.combining(c)])
     return texto_sem_acento.encode('latin-1', 'replace').decode('latin-1')
 
-# 1. Leitura do Histórico do GitHub com exibição da data de atualização
+# 1. Leitura do Histórico do GitHub com exibição apenas da data de atualização
 @st.cache_data
 def carregar_historico_github():
     caminho = "historico_compras.csv"
@@ -135,7 +135,7 @@ def carregar_historico_github():
         try:
             df = pd.read_csv(caminho, header=None, dtype=str)
             mod_time = os.path.getmtime(caminho)
-            data_atualizacao = datetime.datetime.fromtimestamp(mod_time).strftime('%d/%m/%Y às %H:%M')
+            data_atualizacao = datetime.datetime.fromtimestamp(mod_time).strftime('%d/%m/%Y')
             return df, f"Atualizado em: {data_atualizacao}"
         except Exception as e:
             return pd.DataFrame(), f"Erro ao ler historico_compras.csv: {e}"
