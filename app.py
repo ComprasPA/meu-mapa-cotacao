@@ -146,23 +146,22 @@ def carregar_historico_github():
 historico, status_historico = carregar_historico_github()
 st.sidebar.info(f"ℹ️ **Status:** {status_historico}")
 
-# 2. Leitura inteligente e limpa de arquivos Excel (.xlsx) / CSV / Word (.docx)
+# 2. Leitura inteligente e segura de arquivos Excel (.xlsx) / CSV / Word (.docx)
 def extrair_tabela_excel_inteligente(arquivo_excel):
     try:
         xls = pd.ExcelFile(arquivo_excel)
         sheet_name = xls.sheet_names[0]
-        df_raw = pd.read_excel(xls, sheet_name=sheet_name, header=None)
+        df_raw = pd.read_excel(xls, sheet_name=sheet_name, header=None, dtype=str)
         
-        # Procura a linha de cabeçalho que contém 'Item' ou 'Código'
+        # Procura a linha de cabeçalho que contém 'Item' ou 'Código' de forma segura com string
         header_row_idx = 0
         for idx, row in df_raw.iterrows():
-            row_str = " ".join(row.astype(str)).lower()
-            if 'código' in row_str or 'codigo' in row_str or 'descrição' in row_str or 'vlr. unitário' in row_str:
+            row_str = " ".join([str(x) for x in row.values if pd.notna(x)]).lower()
+            if 'código' in row_str or 'codigo' in row_str or 'descrição' in row_str or 'vlr. unitário' in row_str or 'item' in row_str:
                 header_row_idx = idx
                 break
                 
-        # Recria o dataframe com o cabeçalho correto
-        df = pd.read_excel(xls, sheet_name=sheet_name, header=header_row_idx)
+        df = pd.read_excel(xls, sheet_name=sheet_name, header=header_row_idx, dtype=str)
         df.columns = [str(c).strip() for c in df.columns]
         return df
     except Exception as e:
@@ -175,7 +174,7 @@ def extrair_tabela_docx_limpa(arquivo_docx):
         linhas_validas = []
         for tabela in doc.tables:
             for linha in tabela.rows:
-                celulas = [cel.text.strip().replace('\n', ' ') for cel in linha.cells]
+                celulas = [str(cel.text).strip().replace('\n', ' ') for cel in linha.cells]
                 if any(celulas):
                     linhas_validas.append(celulas)
         if linhas_validas:
@@ -193,7 +192,7 @@ if uploaded_cot is not None:
     nome = uploaded_cot.name.lower()
     try:
         if nome.endswith('.csv'):
-            cotacao = pd.read_csv(uploaded_cot)
+            cotacao = pd.read_csv(uploaded_cot, dtype=str)
         elif nome.endswith(('.xlsx', '.xls')):
             cotacao = extrair_tabela_excel_inteligente(uploaded_cot)
         elif nome.endswith('.docx'):
@@ -208,7 +207,6 @@ if cotacao.empty:
 else:
     cotacao.columns = [str(c).strip() for c in cotacao.columns]
 
-    # Identifica colunas relevantes no Excel do TOTVS
     def achar_coluna(df, termos):
         for col in df.columns:
             c_low = str(col).lower()
@@ -224,13 +222,13 @@ else:
     c_forn = achar_coluna(cotacao, ['fornecedor', 'empresa'])
     c_status = achar_coluna(cotacao, ['status'])
 
-    # Filtra apenas o fornecedor vencedor (melhor preço) caso haja múltiplas linhas por item no Excel do TOTVS
+    # Filtra apenas o fornecedor vencedor (melhor preço) se houver coluna de status
     if c_status and not cotacao.empty:
         df_vencedores = cotacao[cotacao[c_status].astype(str).str.contains('vencedor|melhor preço', case=False, na=False)]
         if not df_vencedores.empty:
             cotacao = df_vencedores
 
-    # Remove duplicadas por código de produto para garantir exatamente 1 linha por item real
+    # Remove duplicadas por código para garantir 1 linha por item real
     if c_cod and not cotacao.empty:
         cotacao = cotacao.drop_duplicates(subset=[c_cod])
 
