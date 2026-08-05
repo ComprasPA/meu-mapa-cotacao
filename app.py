@@ -49,7 +49,7 @@ uploaded_cot = st.sidebar.file_uploader(
     type=["csv", "xlsx", "docx"]
 )
 
-# Função auxiliar para conversão rigorosa de valores monetários e numéricos (Tratamento de pontos e vírgulas)
+# Função auxiliar para limpeza rigorosa de valores monetários
 def limpar_valor(valor):
     if pd.isna(valor):
         return 0.0
@@ -57,17 +57,14 @@ def limpar_valor(valor):
     if not val_str or val_str.lower() == 'nan':
         return 0.0
     
-    # Se contiver tanto ponto quanto vírgula (ex: 18.362,00)
     if '.' in val_str and ',' in val_str:
         if val_str.find('.') < val_str.find(','):
             val_str = val_str.replace('.', '').replace(',', '.')
         else:
             val_str = val_str.replace(',', '')
     elif ',' in val_str:
-        # Se contiver apenas vírgula (ex: 18362,00)
         val_str = val_str.replace('.', '').replace(',', '.')
     elif val_str.count('.') > 1:
-        # Se contiver múltiplos pontos de milhar sem vírgula (ex: 18.362)
         val_str = val_str.replace('.', '')
     
     try:
@@ -83,7 +80,14 @@ def formatar_brl(valor):
 def formatar_pct(valor):
     return f"{valor:+,.2f}%".replace(',', 'X').replace('.', ',').replace('X', '.')
 
-# 1. Leitura do histórico de compras do GitHub
+# Função para padronizar códigos (remove zeros à esquerda, espaços e pontos para garantir match exato)
+def normalizar_codigo(codigo):
+    if pd.isna(codigo):
+        return ""
+    limpo = str(codigo).replace('.', '').replace(' ', '').replace('-', '').strip()
+    return limpo.lstrip('0') if limpo.lstrip('0') != '' else '0'
+
+# 1. Leitura robusta do histórico de compras do GitHub (historico_compras.csv)
 @st.cache_data
 def carregar_historico_github():
     caminho = "historico_compras.csv"
@@ -92,11 +96,11 @@ def carregar_historico_github():
             df = pd.read_csv(caminho)
             df.columns = [str(c).strip() for c in df.columns]
             return df
-        except:
-            pass
+        except Exception as e:
+            st.sidebar.error(f"Erro ao carregar historico_compras.csv: {e}")
     
     return pd.DataFrame({
-        'Código': ['0000005177', '0000007519'],
+        'Código': ['5177', '7519'],
         'Prc Unitario': [375.58, 83.36],
         'Nome Fornece': [
             'CAA Com. e Ind. Amaz. de Alumínio Ltda.', 
@@ -173,19 +177,23 @@ resultados = []
 
 for idx, row in cotacao.iterrows():
     num_item = str(row[c_item] if c_item and pd.notna(row[c_item]) else f"{idx+1:04d}").zfill(4)
-    codigo = str(row[c_cod] if c_cod and pd.notna(row[c_cod]) else 'N/D').replace('.', '').replace(' ', '')
+    codigo_original = str(row[c_cod] if c_cod and pd.notna(row[c_cod]) else 'N/D')
+    codigo_busca = normalizar_codigo(codigo_original)
     desc = str(row[c_desc] if c_desc and pd.notna(row[c_desc]) else '')
     
     qtd = limpar_valor(row[c_qtd] if c_qtd and pd.notna(row[c_qtd]) else 0)
     preco_novo = limpar_valor(row[c_vlr] if c_vlr and pd.notna(row[c_vlr]) else 0)
     forn_novo = str(row[c_forn] if c_forn and pd.notna(row[c_forn]) else 'Não informado')
     
-    # Correlação com o histórico de compras do GitHub
+    # Cruzamento otimizado com o histórico usando normalização de códigos
     match = pd.DataFrame()
     if not historico.empty:
         col_cod_hist = achar_coluna(historico, ['código', 'codigo', 'sku', 'cod'])
         if col_cod_hist:
-            match = historico[historico[col_cod_hist].astype(str).str.replace('.', '').str.replace(' ', '') == codigo]
+            # Cria uma coluna temporária normalizada no histórico para comparar com precisão
+            temp_hist = historico.copy()
+            temp_hist['codigo_limpo'] = temp_hist[col_cod_hist].apply(normalizar_codigo)
+            match = temp_hist[temp_hist['codigo_limpo'] == codigo_busca]
     
     if not match.empty:
         col_prc_hist = achar_coluna(match, ['prc unitario', 'preco', 'preço', 'unit'])
@@ -209,7 +217,7 @@ for idx, row in cotacao.iterrows():
         
     resultados.append({
         'Item': num_item,
-        'Código': codigo,
+        'Código': codigo_original,
         'Descrição Resumida': desc,
         'Qtd': qtd,
         'Último Preço Hist. (R$)': ultimo_preco,
@@ -222,7 +230,7 @@ for idx, row in cotacao.iterrows():
 
 df_final = pd.DataFrame(resultados)
 
-# Ordem exata solicitada pelo usuário
+# Ordem exata solicitada
 colunas_exatas = [
     'Item', 
     'Código', 
@@ -238,7 +246,7 @@ colunas_exatas = [
 
 df_final = df_final[colunas_exatas]
 
-# Criação de cópia formatada visualmente com padrão brasileiro correto (R$ X.XXX,XX)
+# Cópia para formatação visual correta (R$ X.XXX,XX)
 df_display = df_final.copy()
 df_display['Qtd'] = df_display['Qtd'].apply(lambda x: f"{x:,.2f}".replace(',', 'X').replace('.', ',').replace('X', '.'))
 df_display['Último Preço Hist. (R$)'] = df_display['Último Preço Hist. (R$)'].apply(formatar_brl)
