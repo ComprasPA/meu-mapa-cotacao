@@ -54,7 +54,7 @@ def limpar_valor(valor):
     if pd.isna(valor):
         return 0.0
     val_str = str(valor).replace('R$', '').strip()
-    if not val_str or val_str.lower() == 'nan':
+    if not val_str or val_str.lower() in ['nan', 'total item', 'total', '##########']:
         return 0.0
     
     if '.' in val_str and ',' in val_str:
@@ -78,49 +78,62 @@ def formatar_brl(valor):
 def formatar_pct(valor):
     return f"{valor:+,.2f}%".replace(',', 'X').replace('.', ',').replace('X', '.')
 
-def normalizar_codigo(codigo):
+def extrair_numeros(codigo):
     if pd.isna(codigo):
         return ""
-    # Remove zeros à esquerda, espaços, pontos e hífens para garantir match perfeito entre arquivos
-    limpo = str(codigo).replace('.', '').replace(' ', '').replace('-', '').strip()
-    return limpo.lstrip('0') if limpo.lstrip('0') != '' else '0'
+    apenas_nums = ''.join(filter(str.isdigit, str(codigo)))
+    return str(int(apenas_nums)) if apenas_nums.isdigit() else str(codigo).strip()
 
-# 1. Leitura Direta e Robusta do historico_compras.csv do GitHub
+# 1. Leitura Inteligente do Histórico do GitHub por Posição de Coluna (Baseado na sua imagem)
 @st.cache_data
 def carregar_historico_github():
     caminho = "historico_compras.csv"
     if os.path.exists(caminho):
         try:
-            df = pd.read_csv(caminho)
-            df.columns = [str(c).strip() for c in df.columns]
+            # Lê o CSV sem assumir cabeçalho fixo para capturar todas as linhas brutas
+            df = pd.read_csv(caminho, header=None, dtype=str)
             return df, "Conectado com sucesso ao GitHub (historico_compras.csv)"
         except Exception as e:
             return pd.DataFrame(), f"Erro ao ler historico_compras.csv: {e}"
     else:
-        # Fallback de demonstração caso o arquivo não seja encontrado na raiz
         df = pd.DataFrame({
-            'Código': ['0000005177', '0000007519'],
-            'Prc Unitario': [375.58, 83.36],
-            'Nome Fornece': [
-                'CAA Com. e Ind. Amaz. de Alumínio Ltda.', 
-                'CAA Comércio Amazonense de Alumínio Ltda.'
-            ]
+            6: ['0000005177', '0000007519'], # Coluna G (índice 6)
+            10: ['203.5525', '83.3645'],     # Coluna K (índice 10)
+            4: ['CAA Com. e Ind. Amaz. de Alumínio Ltda.', 'CAA Comércio Amazonense de Alumínio Ltda.'] # Coluna E (índice 4)
         })
-        return df, "Arquivo historico_compras.csv não encontrado na raiz do GitHub. Usando dados padrão."
+        return df, "historico_compras.csv não encontrado. Usando dados padrão."
 
 historico, status_historico = carregar_historico_github()
-st.sidebar.info(f"ℹ️ **Status do Histórico:** {status_historico}")
+st.sidebar.info(f"ℹ️ **Status:** {status_historico}")
 
-# 2. Leitura e extração do arquivo DOCX da Cotação
-def extrair_tabela_docx(arquivo_docx):
+# 2. Leitura inteligente de arquivos DOCX do TOTVS
+def extrair_tabela_docx_inteligente(arquivo_docx):
     doc = docx.Document(arquivo_docx)
-    dados = []
+    todas_linhas = []
     for tabela in doc.tables:
         for linha in tabela.rows:
-            texto_linha = [celula.text.strip() for celula in linha.cells]
-            dados.append(texto_linha)
-    if len(dados) > 1:
-        return pd.DataFrame(dados[1:], columns=dados[0])
+            texto_linha = [celula.text.strip().replace('\n', ' ') for celula in linha.cells]
+            if any(texto_linha):
+                todas_linhas.append(texto_linha)
+                
+    if len(todas_linhas) > 1:
+        cabecalho_idx = 0
+        for idx, linha in enumerate(todas_linhas[:5]):
+            texto_unido = " ".join(linha).lower()
+            if 'item' in texto_unido or 'codigo' in texto_unido or 'descrição' in texto_unido or 'unitário' in texto_unido:
+                cabecalho_idx = idx
+                break
+                
+        headers = todas_linhas[cabecalho_idx]
+        dados = todas_linhas[cabecalho_idx+1:]
+        
+        df_temp = pd.DataFrame(dados)
+        if len(headers) < len(df_temp.columns):
+            headers = [f"Col_{i}" for i in range(len(df_temp.columns))]
+        elif len(headers) > len(df_temp.columns):
+            headers = headers[:len(df_temp.columns)]
+            
+        return pd.DataFrame(dados, columns=headers)
     return pd.DataFrame()
 
 @st.cache_data
@@ -150,56 +163,95 @@ if uploaded_cot is not None:
         elif nome.endswith(('.xlsx', '.xls')):
             cotacao = pd.read_excel(uploaded_cot)
         elif nome.endswith('.docx'):
-            cotacao = extrair_tabela_docx(uploaded_cot)
+            cotacao = extrair_tabela_docx_inteligente(uploaded_cot)
             if cotacao.empty:
                 cotacao = carregar_cotacao_padrao()
-    except:
+    except Exception as e:
+        st.sidebar.error(f"Erro ao ler arquivo: {e}")
         cotacao = carregar_cotacao_padrao()
 else:
     cotacao = carregar_cotacao_padrao()
 
 cotacao.columns = [str(c).strip() for c in cotacao.columns]
 
-def achar_coluna(df, termos):
+def identificar_colunas_docx(df):
+    col_item, col_cod, col_desc, col_qtd, col_vlr, col_forn = None, None, None, None, None, None
+    
     for col in df.columns:
-        if any(t.lower() in col.lower() for t in termos):
-            return col
-    return None
+        c_low = col.lower()
+        if 'item' in c_low and not col_item: col_item = col
+        elif any(k in c_low for k in ['cód', 'cod', 'sku']) and not col_cod: col_cod = col
+        elif any(k in c_low for k in ['descri', 'produto', 'material']) and not col_desc: col_desc = col
+        elif any(k in c_low for k in ['qtd', 'quant']) and not col_qtd: col_qtd = col
+        elif any(k in c_low for k in ['vlr', 'unit', 'preço', 'preco']) and not col_vlr: col_vlr = col
+        elif any(k in c_low for k in ['fornecedor', 'empresa', 'razão']) and not col_forn: col_forn = col
 
-c_item = achar_coluna(cotacao, ['item'])
-c_cod = achar_coluna(cotacao, ['código', 'codigo', 'sku', 'cod'])
-c_desc = achar_coluna(cotacao, ['descri', 'resumida', 'detalhe'])
-c_qtd = achar_coluna(cotacao, ['qtd', 'quantidade', 'quant'])
-c_vlr = achar_coluna(cotacao, ['vlr. unitário', 'vlr unitario', 'preço', 'preco', 'unit'])
-c_forn = achar_coluna(cotacao, ['fornecedor', 'empresa'])
+    if not col_cod or not col_vlr:
+        for col in df.columns:
+            amostra = " ".join(df[col].astype(str).values).lower()
+            if not col_cod and any(digitos.isdigit() and len(digitos) >= 4 for digitos in df[col].astype(str)):
+                col_cod = col
+            if not col_vlr and 'r$' in amostra:
+                col_vlr = col
+                
+    return col_item, col_cod, col_desc, col_qtd, col_vlr, col_forn
+
+c_item, c_cod, c_desc, c_qtd, c_vlr, c_forn = identificar_colunas_docx(cotacao)
 
 resultados = []
 
 for idx, row in cotacao.iterrows():
+    linha_texto = " ".join([str(v) for v in row.values]).lower()
+    if 'total' in linha_texto and not c_cod:
+        continue
+
     num_item = str(row[c_item] if c_item and pd.notna(row[c_item]) else f"{idx+1:04d}").zfill(4)
-    codigo_original = str(row[c_cod] if c_cod and pd.notna(row[c_cod]) else 'N/D')
-    codigo_busca = normalizar_codigo(codigo_original)
-    desc = str(row[c_desc] if c_desc and pd.notna(row[c_desc]) else '')
+    codigo_original = str(row[c_cod] if c_cod and pd.notna(row[c_cod]) else f"SKU{idx+1}")
+    codigo_busca = extrair_numeros(codigo_original)
     
-    qtd = limpar_valor(row[c_qtd] if c_qtd and pd.notna(row[c_qtd]) else 0)
+    desc = str(row[c_desc] if c_desc and pd.notna(row[c_desc]) else 'Descrição não informada')
+    qtd = limpar_valor(row[c_qtd] if c_qtd and pd.notna(row[c_qtd]) else 1)
     preco_novo = limpar_valor(row[c_vlr] if c_vlr and pd.notna(row[c_vlr]) else 0)
-    forn_novo = str(row[c_forn] if c_forn and pd.notna(row[c_forn]) else 'Não informado')
+    forn_novo = str(row[c_forn] if c_forn and pd.notna(row[c_forn]) else 'Fornecedor não informado')
     
-    # Cruzamento avançado com o histórico do GitHub
+    if preco_novo == 0.0:
+        for val in row.values:
+            v_limpo = limpar_valor(val)
+            if v_limpo > 0 and v_limpo != qtd:
+                preco_novo = v_limpo
+                break
+
+    # Busca no Histórico mapeando pelas posições padrão da sua planilha (Coluna G = Código, Coluna K = Preço, Coluna E = Fornecedor)
     match = pd.DataFrame()
     if not historico.empty:
-        col_cod_hist = achar_coluna(historico, ['código', 'codigo', 'sku', 'cod'])
-        if col_cod_hist:
-            temp_hist = historico.copy()
-            temp_hist['codigo_limpo'] = temp_hist[col_cod_hist].apply(normalizar_codigo)
-            match = temp_hist[temp_hist['codigo_limpo'] == codigo_busca]
+        for h_idx, h_row in historico.iterrows():
+            # Varre todas as colunas da linha do CSV para achar o código correspondente
+            for col_num in h_row.index:
+                val_celula = str(h_row[col_num])
+                if extrair_numeros(val_celula) == codigo_busca and codigo_busca != '':
+                    match = h_row
+                    break
+            if not match.empty:
+                break
     
     if not match.empty:
-        col_prc_hist = achar_coluna(match, ['prc unitario', 'preco', 'preço', 'unit'])
-        col_forn_hist = achar_coluna(match, ['nome fornece', 'fornecedor'])
-        
-        ultimo_preco = limpar_valor(match.iloc[-1][col_prc_hist]) if col_prc_hist else preco_novo
-        forn_hist = str(match.iloc[-1][col_forn_hist]) if col_forn_hist else "Histórico Anterior"
+        # Pega o preço da Coluna K (índice 10) ou da coluna que tiver formato numérico com ponto/vírgula
+        ultimo_preco = 0.0
+        for col_num in match.index:
+            v_teste = limpar_valor(match[col_num])
+            if v_teste > 1.0 and v_teste != qtd: # Evita pegar quantidades baixas como preço
+                ultimo_preco = v_teste
+                
+        # Pega o fornecedor da Coluna E (índice 4) ou texto longo
+        forn_hist = "Histórico Anterior"
+        for col_num in match.index:
+            t_celula = str(match[col_num])
+            if len(t_celula) > 10 and not any(char.isdigit() for char in t_celula[:3]):
+                forn_hist = t_celula
+                break
+                
+        if ultimo_preco == 0.0:
+            ultimo_preco = preco_novo
     else:
         ultimo_preco = preco_novo
         forn_hist = "Sem Histórico"
@@ -245,7 +297,7 @@ colunas_exatas = [
 
 df_final = df_final[colunas_exatas]
 
-# Cópia para formatação visual correta (R$ X.XXX,XX)
+# Formatação visual padrão brasileiro (R$ X.XXX,XX)
 df_display = df_final.copy()
 df_display['Qtd'] = df_display['Qtd'].apply(lambda x: f"{x:,.2f}".replace(',', 'X').replace('.', ',').replace('X', '.'))
 df_display['Último Preço Hist. (R$)'] = df_display['Último Preço Hist. (R$)'].apply(formatar_brl)
