@@ -21,17 +21,19 @@ uploaded_cot = st.sidebar.file_uploader(
     type=["csv", "xlsx", "docx"]
 )
 
-# 1. Leitura Automática do Histórico direto do GitHub
+# 1. Leitura e Normalização Automática do Histórico do GitHub
 @st.cache_data
 def carregar_historico_github():
     caminho = "historico_compras.csv"
     if os.path.exists(caminho):
         try:
-            return pd.read_csv(caminho)
+            df = pd.read_csv(caminho)
+            df.columns = [str(c).strip() for c in df.columns]
+            return df
         except Exception as e:
             st.sidebar.error(f"Erro ao ler historico_compras.csv: {e}")
     
-    # Fallback compatível com os códigos de exemplo
+    # Fallback caso o arquivo não seja encontrado ou esteja vazio
     return pd.DataFrame({
         'Código': ['0000005177', '0000007519'],
         'Data': ['2026-02-10', '2026-01-20'],
@@ -43,6 +45,15 @@ def carregar_historico_github():
     })
 
 historico = carregar_historico_github()
+
+# Padroniza dinamicamente o nome da coluna de código no histórico (seja 'Código', 'Codigo', 'SKU', 'Cod')
+col_codigo_hist = None
+for col in historico.columns:
+    if any(termo in col.lower() for termo in ['cod', 'sku', 'código']):
+        col_codigo_hist = col
+        break
+if col_codigo_hist and col_codigo_hist != 'Código':
+    historico.rename(columns={col_codigo_hist: 'Código'}, inplace=True)
 
 # 2. Leitura de Cotação (Suporte a DOCX, CSV e XLSX)
 def extrair_tabela_docx(arquivo_docx):
@@ -93,68 +104,83 @@ if uploaded_cot is not None:
 else:
     cotacao = carregar_cotacao_padrao()
 
-# Padronização de nomes de colunas
-historico.columns = [str(c).strip() for c in historico.columns]
 cotacao.columns = [str(c).strip() for c in cotacao.columns]
 
-# Motor de processamento idêntico ao layout de referência
+# Identifica colunas flexíveis na cotação
+def achar_coluna(df, termos):
+    for col in df.columns:
+        if any(t in col.lower() for t in termos):
+            return col
+    return None
+
+c_cod_cot = achar_coluna(cotacao, ['cod', 'sku', 'código'])
+c_item_cot = achar_coluna(cotacao, ['item', 'produto'])
+c_desc_cot = achar_coluna(cotacao, ['descri', 'detalhe'])
+c_qtd_cot = achar_coluna(cotacao, ['qtd', 'quant'])
+c_preco_cot = achar_coluna(cotacao, ['novo', 'preço', 'preco', 'unit'])
+c_forn_cot = achar_coluna(cotacao, ['fornecedor', 'empresa'])
+
+# Motor de processamento alinhado ao padrão analítico
 resultados = []
 
 for idx, row_cot in cotacao.iterrows():
-    num_item = str(row_cot.get('Item', f"{idx+1:04d}"))
+    num_item = str(row_cot[c_item_cot] if c_item_cot else f"{idx+1:04d}")
     if len(num_item) < 4:
         num_item = num_item.zfill(4)
         
-    codigo = str(row_cot.get('Código', row_cot.get('Codigo', row_cot.get('SKU', 'N/D')))).replace('.', '').replace(' ', '')
-    desc = str(row_cot.get('Descrição Resumida', row_cot.get('Descricao Resumida', row_cot.get('Descrição', ''))))
+    codigo = str(row_cot[c_cod_cot] if c_cod_cot else 'N/D').replace('.', '').replace(' ', '')
+    desc = str(row_cot[c_desc_cot] if c_desc_cot else '')
     
     try:
-        qtd = float(str(row_cot.get('Qtd', row_cot.get('Quantidade', 0))).replace('R$', '').replace(',', '.'))
+        qtd = float(str(row_cot[c_qtd_cot] if c_qtd_cot else 0).replace('R$', '').replace(',', '.'))
     except:
         qtd = 0.0
 
     try:
-        preco_novo = float(str(row_cot.get('Novo Preço Unit. (R$)', row_cot.get('Novo Preco Unit. (R$)', row_cot.get('Preço Unit. (R$)', 0)))).replace('R$', '').replace('.', '').replace(',', '.'))
+        preco_novo = float(str(row_cot[c_preco_cot] if c_preco_cot else 0).replace('R$', '').replace('.', '').replace(',', '.'))
     except:
         preco_novo = 0.0
 
-    forn_novo = str(row_cot.get('Fornecedor do Preço Novo', row_cot.get('Fornecedor', 'Não informado')))
+    forn_novo = str(row_cot[c_forn_cot] if c_forn_cot else 'Não informado')
     
-    # Busca correspondente no histórico
-    match_hist = historico[historico['Código'].astype(str).str.replace('.', '').str.replace(' ', '') == codigo] if not historico.empty else pd.DataFrame()
+    # Busca correspondente no histórico (garantindo segurança caso a coluna Código exista)
+    if not historico.empty and 'Código' in historico.columns:
+        match_hist = historico[historico['Código'].astype(str).str.replace('.', '').str.replace(' ', '') == codigo]
+    else:
+        match_hist = pd.DataFrame()
     
     if not match_hist.empty:
-        col_preco_hist = [c for c in match_hist.columns if 'preço' in c.lower() or 'preco' in c.lower() or 'unit' in c.lower()]
-        col_forn_hist = [c for c in match_hist.columns if 'fornecedor' in c.lower()]
+        col_preco_hist = achar_coluna(match_hist, ['preço', 'preco', 'unit'])
+        col_forn_hist = achar_coluna(match_hist, ['fornecedor'])
         
         if col_preco_hist:
             try:
-                ultimo_preco = float(str(match_hist.iloc[-1][col_preco_hist[0]]).replace('R$', '').replace('.', '').replace(',', '.'))
+                ultimo_preco = float(str(match_hist.iloc[-1][col_preco_hist]).replace('R$', '').replace('.', '').replace(',', '.'))
             except:
                 ultimo_preco = preco_novo
         else:
             ultimo_preco = preco_novo
             
         if col_forn_hist:
-            forn_hist = str(match_hist.iloc[-1][col_forn_hist[0]])
+            forn_hist = str(match_hist.iloc[-1][col_forn_hist])
         else:
             forn_hist = "Histórico Anterior"
     else:
         ultimo_preco = preco_novo
         forn_hist = "Sem Histórico"
         
-    # Cálculos de Variação (Δ%) e Padrão de Tendência Exato da Imagem
+    # Cálculos e tendências baseados no layout profissional
     if ultimo_preco > 0:
         variacao = ((preco_novo - ultimo_preco) / ultimo_preco) * 100
     else:
         variacao = 0.0
         
     if variacao < 0:
-        tendencia = f"Queda (Favorável)"
+        tendencia = "Queda (Favorável)"
     elif variacao > 0:
-        tendencia = f"Alta (Desfavorável)"
+        tendencia = "Alta (Desfavorável)"
     else:
-        tendencia = f"Estabilidade"
+        tendencia = "Estabilidade"
         
     resultados.append({
         'Item': num_item,
@@ -171,7 +197,7 @@ for idx, row_cot in cotacao.iterrows():
 
 df_final = pd.DataFrame(resultados)
 
-# Exibição da Tabela Consolidada rigorosamente na ordem solicitada
+# Exibição da Tabela Consolidada
 st.subheader("📋 Mapa de Cotação Consolidado & Comparativo Histórico")
 
 st.dataframe(df_final.style.format({
