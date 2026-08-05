@@ -17,7 +17,7 @@ st.set_page_config(
     layout="wide"
 )
 
-# Estilização visual corporativa estilo Dados Bancários
+# Estilização visual corporativa estilo Dados Bancários e prevenção de quebra na coluna de variação
 st.markdown("""
     <style>
     .main { background-color: #ffffff; }
@@ -37,6 +37,7 @@ st.markdown("""
         padding: 10px !important;
         border: 1px solid #b4c6e7 !important;
         font-size: 13px !important;
+        white-space: nowrap !important;
     }
     .dataframe td {
         padding: 9px 10px !important;
@@ -44,6 +45,11 @@ st.markdown("""
         color: #000000 !important;
         font-size: 13px !important;
         text-align: right;
+    }
+    /* Impede estritamente a quebra de texto na coluna Variação (Δ%) */
+    .dataframe td:nth-child(9), .dataframe th:nth-child(9) {
+        white-space: nowrap !important;
+        text-align: center !important;
     }
     .dataframe tr:nth-child(even) {
         background-color: #f2f5f9 !important;
@@ -128,13 +134,13 @@ def formatar_pct_com_seta(valor):
     
     val_fmt = f"{val_float:+,.2f}%".replace(',', 'X').replace('.', ',').replace('X', '.')
     
-    # Seta e fonte da mesma cor (tamanho maior e negrito forte)
+    # Seta e percentual na mesma linha sem quebra (white-space: nowrap)
     if val_float > 0:
-        return f"<span style='color: #c00000; font-size: 16px; font-weight: 900; vertical-align: middle;'>↑ {val_fmt}</span>"
+        return f"<span style='color: #c00000; font-size: 15px; font-weight: 900; white-space: nowrap;'>↑ {val_fmt}</span>"
     elif val_float < 0:
-        return f"<span style='color: #2ca02c; font-size: 16px; font-weight: 900; vertical-align: middle;'>↓ {val_fmt}</span>"
+        return f"<span style='color: #2ca02c; font-size: 15px; font-weight: 900; white-space: nowrap;'>↓ {val_fmt}</span>"
     else:
-        return f"<span style='color: #555555; font-size: 14px; font-weight: bold;'>{val_fmt}</span>"
+        return f"<span style='color: #555555; font-size: 13px; font-weight: bold; white-space: nowrap;'>{val_fmt}</span>"
 
 def padronizar_codigo_10_digitos(codigo):
     """Padroniza rigorosamente o código do produto com 10 dígitos, completando com zeros à esquerda"""
@@ -460,7 +466,8 @@ else:
             pdf = PDFProfissional()
             pdf.add_page()
             
-            col_widths = [10, 22, 60, 10, 20, 50, 20, 50, 21, 21]
+            # Alargado o espaço da coluna de variação no PDF (22 mm) para acomodar perfeitamente o texto sem quebra
+            col_widths = [10, 22, 60, 10, 20, 50, 20, 50, 22, 20]
             headers = [
                 "Item", "Codigo", "Descricao", "Qtd", 
                 "Novo Preco", "Forn. Novo", "Ult. Preco", 
@@ -504,9 +511,9 @@ else:
                 
                 if var_val != "":
                     if var_val < 0:
-                        pdf.set_text_color(0, 128, 0)
+                        pdf.set_text_color(44, 160, 44) # Verde
                     elif var_val > 0:
-                        pdf.set_text_color(200, 0, 0)
+                        pdf.set_text_color(192, 0, 0) # Vermelho
                     else:
                         pdf.set_text_color(0, 0, 0)
                 
