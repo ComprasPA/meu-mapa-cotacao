@@ -5,7 +5,6 @@ import os
 import docx
 from fpdf import FPDF
 import unicodedata
-from google import genai
 
 # Configuração da Página
 st.set_page_config(
@@ -49,19 +48,11 @@ st.markdown("Plataforma analítica para homologação de preços, variação de 
 if 'limpar_cache' not in st.session_state:
     st.session_state.limpar_cache = False
 
-# Barra lateral para upload, chave da IA e ações de controle
+# Barra lateral para upload e ações de controle
 st.sidebar.header("📁 Fontes de Dados")
 uploaded_cot = st.sidebar.file_uploader(
     "Carregar Mapa de Cotação Atual (.csv, .xlsx ou .docx)", 
     type=["csv", "xlsx", "docx"]
-)
-
-st.sidebar.markdown("---")
-st.sidebar.header("🤖 Inteligência Artificial")
-gemini_api_key = st.sidebar.text_input(
-    "Chave da API do Gemini", 
-    type="password", 
-    help="Insira sua chave da API do Google AI Studio para habilitar o painel executivo da IA."
 )
 
 st.sidebar.markdown("---")
@@ -389,42 +380,6 @@ else:
                 file_name="mapa_de_cotacao_suprimentos.pdf",
                 mime="application/pdf"
             )
-
-        # Seção de Painel Analítico & Estratégico com Gemini AI
-        st.markdown("---")
-        st.subheader("🤖 Painel Analítico & Executivo (Gerado por Gemini AI)")
-        
-        if st.button("✨ Executar Análise Comparativa e Montar Painel Executivo"):
-            if not gemini_api_key:
-                st.warning("⚠️ Por favor, insira a sua Chave da API do Gemini na barra lateral para gerar a análise.")
-            else:
-                with st.spinner("A Inteligência Artificial está processando as comparações de preços, fornecedores e montando o painel executivo..."):
-                    try:
-                        client = genai.Client(api_key=gemini_api_key)
-                        
-                        resumo_dados = df_final[['Código', 'Descrição Resumida', 'Qtd', 'Último Preço Hist. (R$)', 'Fornecedor do Último Preço', 'Novo Preço Unit. (R$)', 'Fornecedor do Preço Novo', 'Variação (Δ%)', 'Tendência']].to_string()
-                        
-                        prompt = (
-                            "Atue como um Especialista Sênior em Supply Chain, Gestão de Compras e Negociação Corporativa. "
-                            "Com base no mapa de cotação atual comparado estritamente ao histórico de compras abaixo:\n\n"
-                            f"{resumo_dados}\n\n"
-                            "Monte um **Painel Comparativo e Executivo** formatado em blocos claros com as seguintes seções:\n"
-                            "1. **Resumo Executivo do Cenário:** Visão geral da cotação frente ao histórico consolidado.\n"
-                            "2. **Quadro de Oportunidades (Ganhos de Margem / Reduções):** Destaque dos itens com variação favorável (queda) e os fornecedores envolvidos.\n"
-                            "3. **Matriz de Alertas e Riscos (Aumentos de Custo):** Análise crítica dos itens que apresentaram alta e diretrizes para renegociação urgente.\n"
-                            "4. **Recomendações Estratégicas Finais para Homologação:** Considerações logísticas, fiscais (ZFM) e fechamento de ordens de compra."
-                        )
-                        
-                        response = client.models.generate_content(
-                            model='gemini-2.5-flash',
-                            contents=prompt,
-                        )
-                        
-                        st.success("Painel Comparativo Estratégico gerado com sucesso!")
-                        st.markdown(response.text)
-                        
-                    except Exception as e:
-                        st.error(f"Erro ao comunicar com a API do Gemini: {e}")
 
         # Bloco de Observações Técnicas (ZFM e Logística)
         st.markdown("---")
