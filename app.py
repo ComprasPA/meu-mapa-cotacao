@@ -1,7 +1,6 @@
 import streamlit as pd_st
 import pandas as pd
 import numpy as np
-import os
 
 # Configuração da Página
 pd_st.set_page_config(
@@ -22,60 +21,14 @@ pd_st.markdown("""
 pd_st.title("📊 Gestão Estratégica de Suprimentos | Mapa de Cotação & Histórico")
 pd_st.markdown("Plataforma analítica para homologação de preços, variação de custos e tomada de decisão comercial.")
 
-# Sidebar para upload de dados (Planilhas e Documentos estruturados)
-pd_st.sidebar.header("📁 Fontes de Dados (Upload)")
-uploaded_file = pd_st.sidebar.file_uploader("Carregar Mapa de Cotação Atual (.csv ou .xlsx)", type=["csv", "xlsx"])
+# Sidebar para upload interativo de dados
+pd_st.sidebar.header("📁 Painel de Dados")
+uploaded_file = pd_st.sidebar.file_uploader("Carregar Mapa de Cotação (.csv ou .xlsx)", type=["csv", "xlsx"])
 uploaded_history = pd_st.sidebar.file_uploader("Carregar Histórico de Compras (.csv ou .xlsx)", type=["csv", "xlsx"])
 
-# Função auxiliar para ler arquivos suportados
-def ler_arquivo(arquivo_upload, caminho_padrao):
-    try:
-        if arquivo_upload is not None:
-            nome = arquivo_upload.name.lower()
-            if nome.endswith('.csv'):
-                return pd.read_csv(arquivo_upload)
-            elif nome.endswith(('.xlsx', '.xls')):
-                return pd.read_excel(arquivo_upload)
-        elif os.path.exists(caminho_padrao):
-            if caminho_padrao.endswith('.csv'):
-                return pd.read_csv(caminho_padrao)
-            elif caminho_padrao.endswith(('.xlsx', '.xls')):
-                return pd.read_excel(caminho_padrao)
-    except Exception as e:
-        pd_st.sidebar.error(f"Erro ao ler o arquivo: {e}")
-    return None
-
-# Função para padronizar colunas independentemente de como vierem no documento
-def padronizar_colunas(df):
-    if df is None or df.empty:
-        return pd.DataFrame()
-    df.columns = df.columns.str.strip()
-    renomear = {}
-    for col in df.columns:
-        col_lower = col.lower()
-        if col_lower in ['codigo', 'código', 'cod', 'sku', 'item code']:
-            renomear[col] = 'Código'
-        elif col_lower in ['item', 'produto', 'material', 'descrição', 'descricao']:
-            renomear[col] = 'Item'
-        elif col_lower in ['descricao resumida', 'descrição resumida', 'descrição', 'detalhes']:
-            renomear[col] = 'Descrição Resumida'
-        elif col_lower in ['qtd', 'quantidade', 'quant', 'qtde']:
-            renomear[col] = 'Qtd'
-        elif col_lower in ['preco unit. (r$)', 'preço unit. (r$)', 'preco unitario', 'preço unitário', 'preco', 'preço', 'valor unitario', 'valor unitário']:
-            renomear[col] = 'Preço Unit. (R$)'
-        elif col_lower in ['novo preco unit. (r$)', 'novo preço unit. (r$)', 'novo preco', 'novo preço', 'preco cotado']:
-            renomear[col] = 'Novo Preço Unit. (R$)'
-        elif col_lower in ['fornecedor', 'forn', 'empresa']:
-            renomear[col] = 'Fornecedor'
-        elif col_lower in ['fornecedor do preço novo', 'fornecedor preco novo', 'novo fornecedor']:
-            renomear[col] = 'Fornecedor do Preço Novo'
-        elif col_lower in ['data', 'dt', 'data da compra']:
-            renomear[col] = 'Data'
-    return df.rename(columns=renomear)
-
-# Mocks de segurança caso não haja arquivos enviados
-def gerar_hist_mock():
-    return pd.DataFrame({
+# Bases de Dados Padrão (Garantia de funcionamento imediato)
+def carregar_dados_padrao():
+    hist_data = pd.DataFrame({
         'Código': ['SKU001', 'SKU001', 'SKU002', 'SKU003', 'SKU003'],
         'Data': ['2025-10-15', '2026-02-10', '2026-01-20', '2025-11-05', '2026-03-12'],
         'Item': ['Luva de Raspa', 'Luva de Raspa', 'Bobina Térmica 80x40', 'Terminal Tubular', 'Terminal Tubular'],
@@ -84,9 +37,8 @@ def gerar_hist_mock():
         'Preço Unit. (R$)': [12.50, 13.20, 85.00, 22.00, 20.50],
         'Fornecedor': ['EPI Manaus Comércio', 'Industrial Sul Ltda', 'Papelaria & Cia', 'Conexões Amazônia', 'Global Elétrica SP']
     })
-
-def gerar_cot_mock():
-    return pd.DataFrame({
+    
+    cot_data = pd.DataFrame({
         'Item': ['Luva de Raspa', 'Bobina Térmica 80x40', 'Terminal Tubular'],
         'Código': ['SKU001', 'SKU002', 'SKU003'],
         'Descrição Resumida': ['Luva raspa couro cano curto', 'Bobina papel térmico cx c/ 30', 'Terminal tubular 2.5mm pct 100un'],
@@ -94,37 +46,63 @@ def gerar_cot_mock():
         'Novo Preço Unit. (R$)': [14.00, 82.00, 23.50],
         'Fornecedor do Preço Novo': ['EPI Manaus Comércio', 'Papelaria & Cia', 'Metaltec Suprimentos']
     })
+    return hist_data, cot_data
 
-# Carregamento efetivo
-hist_raw = ler_arquivo(uploaded_history, "historico_compras.csv")
-if hist_raw is None or hist_raw.empty:
-    hist_data = gerar_hist_mock()
-else:
-    hist_data = padronizar_colunas(hist_raw)
+# Leitura dos arquivos enviados pelo usuário ou uso do padrão
+try:
+    if uploaded_history is not None:
+        hist_data = pd.read_csv(uploaded_history) if uploaded_history.name.endswith('.csv') else pd.read_excel(uploaded_history)
+    else:
+        # Tenta ler do GitHub se existir, senão usa o padrão
+        try:
+            hist_data = pd.read_csv("historico_compras.csv")
+        except:
+            hist_data, _ = carregar_dados_padrao()
 
-cot_raw = ler_arquivo(uploaded_file, "mapa_cotacao.csv")
-if cot_raw is None or cot_raw.empty:
-    cot_data = gerar_cot_mock()
-else:
-    cot_data = padronizar_colunas(cot_raw)
+    if uploaded_file is not None:
+        cot_data = pd.read_csv(uploaded_file) if uploaded_file.name.endswith('.csv') else pd.read_excel(uploaded_file)
+    else:
+        _, cot_data = carregar_dados_padrao()
+except Exception as e:
+    pd_st.error(f"Erro ao carregar os arquivos: {e}")
+    hist_data, cot_data = carregar_dados_padrao()
 
-# Processamento do Comparativo Histórico na ordem exata solicitada
+# Normalização de nomes de colunas para aceitar variações de maiúsculas/minúsculas
+def limpar_colunas(df):
+    df.columns = df.columns.str.strip().str.title()
+    return df
+
+hist_data = limpar_colunas(hist_data)
+cot_data = limpar_colunas(cot_data)
+
+# Processamento do Comparativo Histórico
 def processar_comparativo(historico, cotacao):
     resultado = []
     
-    if 'Data' in historico.columns:
-        historico['Data'] = pd.to_datetime(historico['Data'], errors='coerce')
-        historico = historico.sort_values(by='Data', ascending=False)
-    
+    # Padronização interna de nomes comuns
+    for col in historico.columns:
+        if 'Cod' in col or 'Sku' in col: historico.rename(columns={col: 'Código'}, inplace=True)
+        if 'Preco' in col or 'Preço' in col: historico.rename(columns={col: 'Preço Unit. (R$)'}, inplace=True)
+        if 'Fornecedor' in col: historico.rename(columns={col: 'Fornecedor'}, inplace=True)
+
+    for col in cotacao.columns:
+        if 'Cod' in col or 'Sku' in col: cotacao.rename(columns={col: 'Código'}, inplace=True)
+        if 'Novo Preco' in col or 'Novo Preço' in col: cotacao.rename(columns={col: 'Novo Preço Unit. (R$)'}, inplace=True)
+        if 'Qtd' in col or 'Quantidade' in col: cotacao.rename(columns={col: 'Qtd'}, inplace=True)
+
     for _, row in cotacao.iterrows():
         codigo = str(row.get('Código', 'N/D'))
         item = str(row.get('Item', 'Item Genérico'))
-        desc = str(row.get('Descrição Resumida', ''))
+        desc = str(row.get('Descrição Resumida', row.get('Descricao Resumida', '')))
         qtd_novo = float(row.get('Qtd', 0))
         preco_novo = float(row.get('Novo Preço Unit. (R$)', row.get('Preço Unit. (R$)', 0.0)))
-        forn_novo = str(row.get('Fornecedor do Preço Novo', row.get('Fornecedor', 'Não informado')))
+        forn_novo = str(row.get('Fornecedor Do Preço Novo', row.get('Fornecedor', 'Não informado')))
         
-        hist_item = historico[historico['Código'].astype(str) == codigo] if 'Código' in historico.columns else pd.DataFrame()
+        # Filtra histórico do item correspondente
+        if 'Código' in historico.columns:
+            hist_item = historico[historico['Código'].astype(str) == codigo]
+        else:
+            hist_item = pd.DataFrame()
         
         if not hist_item.empty and 'Preço Unit. (R$)' in hist_item.columns:
             ultimo_preco_hist = float(hist_item.iloc[0]['Preço Unit. (R$)'])
@@ -162,7 +140,7 @@ def processar_comparativo(historico, cotacao):
         
     df_res = pd.DataFrame(resultado)
     
-    # Ordem rigorosa exigida:
+    # Ordem rigorosa exigida pelas diretrizes do especialista
     colunas_ordenadas = [
         'Item', 'Código', 'Descrição Resumida', 'Qtd', 
         'Último Preço Hist. (R$)', 'Fornecedor do Último Preço', 
@@ -188,9 +166,9 @@ pd_st.dataframe(df_resultado.style.format({
 pd_st.markdown("---")
 pd_st.subheader("🔍 Observações Logísticas e Fiscais (ZFM)")
 pd_st.markdown("""
-* **Impacto Logístico:** Avaliação do custo total de frete (modal aéreo/fluvial) para suprimentos oriundos de 'Fora do Estado' em comparação com fornecedores de Manaus.
-* **Incentivos Fiscais:** Validação da aplicação correta dos benefícios tributários da Zona Franca de Manaus (ZFM) para preservar a margem operacional.
-* **Picos Fora da Curva:** Análise crítica obrigatória em variações superiores a +5%, verificando oscilações de matéria-prima e custos de transporte antes da emissão do pedido.
+* **Impacto Logístico:** Avaliação do custo total de frete (modal aéreo/fluvial) para suprimentos oriundos de 'Fora do Estado' em comparação com fornecedores locais de Manaus.
+* **Incentivos Fiscais:** Validação da aplicação correta dos benefícios tributários da Zona Franca de Manaus (ZFM) para preservação de margem.
+* **Picos Fora da Curva:** Análise crítica obrigatória em variações superiores a +5%, verificando oscilações de matéria-prima e custos logísticos antes da emissão da O.C.
 """)
 
 # Seção Obrigatória: Insight do Especialista
