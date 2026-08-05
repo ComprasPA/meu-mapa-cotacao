@@ -388,25 +388,26 @@ else:
             mime="application/pdf"
         )
 
-    # Seção de Análise Avançada com Gemini AI
+    # Seção de Painel Analítico & Estratégico com Gemini AI
     st.markdown("---")
-    st.subheader("🤖 Análise Estratégica de Suprimentos com Gemini AI")
+    st.subheader("🤖 Painel Analítico & Executivo (Gerado por Gemini AI)")
     
-    if st.button("✨ Executar Análise Inteligente de Custos"):
-        with st.spinner("Analisando cotações, variações e histórico via Inteligência Artificial..."):
+    if st.button("✨ Executar Análise Comparativa e Montar Painel Executivo"):
+        with st.spinner("A Inteligência Artificial está processando as comparações de preços, fornecedores e montando o painel executivo..."):
             try:
                 client = genai.Client(api_key=GEMINI_API_KEY)
                 
-                resumo_dados = df_final[['Código', 'Descrição Resumida', 'Qtd', 'Último Preço Hist. (R$)', 'Novo Preço Unit. (R$)', 'Variação (Δ%)', 'Fornecedor do Preço Novo']].to_string()
+                resumo_dados = df_final[['Código', 'Descrição Resumida', 'Qtd', 'Último Preço Hist. (R$)', 'Fornecedor do Último Preço', 'Novo Preço Unit. (R$)', 'Fornecedor do Preço Novo', 'Variação (Δ%)', 'Tendência']].to_string()
                 
                 prompt = (
-                    "Atue como um Especialista Sênior em Supply Chain, Gestão Estratégica de Compras e Negociação Corporativa. "
-                    "Analise os seguintes dados do mapa de cotação comparado com o histórico:\n\n"
+                    "Atue como um Especialista Sênior em Supply Chain, Gestão de Compras e Negociação Corporativa. "
+                    "Com base no mapa de cotação atual comparado estritamente ao histórico de compras abaixo:\n\n"
                     f"{resumo_dados}\n\n"
-                    "Forneça um relatório executivo estruturado com:\n"
-                    "1. **Oportunidades de Economia:** Destaques dos itens com reduções favoráveis.\n"
-                    "2. **Alertas de Risco:** Itens com aumentos expressivos que exigem renegociação.\n"
-                    "3. **Recomendações Práticas de Homologação:** Diretrizes claras para tomada de decisão comercial considerando volume e mercado."
+                    "Monte um **Painel Comparativo e Executivo** formatado em blocos claros com as seguintes seções:\n"
+                    "1. **Resumo Executivo do Cenário:** Visão geral da cotação frente ao histórico consolidado.\n"
+                    "2. **Quadro de Oportunidades (Ganhos de Margem / Reduções):** Destaque dos itens com variação favorável (queda) e os fornecedores envolvidos.\n"
+                    "3. **Matriz de Alertas e Riscos (Aumentos de Custo):** Análise crítica dos itens que apresentaram alta e diretrizes para renegociação urgente.\n"
+                    "4. **Recomendações Estratégicas Finais para Homologação:** Considerações logísticas, fiscais (ZFM) e fechamento de ordens de compra."
                 )
                 
                 response = client.models.generate_content(
@@ -414,7 +415,7 @@ else:
                     contents=prompt,
                 )
                 
-                st.success("Análise gerada com sucesso pelo Gemini!")
+                st.success("Painel Comparativo Estratégico gerado com sucesso!")
                 st.markdown(response.text)
                 
             except Exception as e:
@@ -429,7 +430,7 @@ else:
     * **Picos Fora da Curva:** Análise crítica obrigatória em variações superiores a +5%, verificando oscilações de matéria-prima e custos logísticos antes da emissão da O.C.
     """)
 
-    # Seção Obrigatória: Insight Rápido do Especialista
+    # Seção Obrigatória: Insight Rápido do Especialista Local
     st.markdown("---")
     st.subheader("💡 Insight Rápido do Especialista")
 
