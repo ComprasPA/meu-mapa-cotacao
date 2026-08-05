@@ -4,7 +4,6 @@ import numpy as np
 import os
 import docx
 from fpdf import FPDF
-import tempfile
 
 # Configuração da Página
 st.set_page_config(
@@ -43,10 +42,6 @@ st.markdown("""
 
 st.title("📊 Gestão Estratégica de Suprimentos | Mapa de Cotação & Histórico")
 st.markdown("Plataforma analítica para homologação de preços, variação de custos e tomada de decisão comercial.")
-
-# Gerenciamento de Estado para Limpar Histórico/Sessão
-if 'limpar_cache' not in st.session_state:
-    st.session_state.limpar_cache = False
 
 # Barra lateral para upload e ações de controle
 st.sidebar.header("📁 Fontes de Dados")
@@ -334,12 +329,12 @@ st.subheader("📋 Mapa de Cotação Consolidado & Comparativo Histórico")
 
 st.markdown(df_display.to_html(escape=False, index=False), unsafe_allow_html=True)
 
-# Função para Gerar PDF do Relatório
+# Função para Gerar PDF do Relatório com retorno estrito em bytes
 def gerar_pdf(df):
     pdf = FPDF(orientation='L', unit='mm', format='A4')
     pdf.add_page()
     pdf.set_font("helvetica", "B", 14)
-    pdf.cell(0, 10, "Mapa de Cotacao & Comparativo Histórico - Suprimentos", 0, 1, "C")
+    pdf.cell(0, 10, "Mapa de Cotacao & Comparativo Historico - Suprimentos", 0, 1, "C")
     pdf.ln(5)
     
     pdf.set_font("helvetica", "B", 8)
@@ -368,7 +363,11 @@ def gerar_pdf(df):
         pdf.cell(col_widths[9], 6, str(row['Tendência']), 1, 0, "C")
         pdf.ln()
         
-    return pdf.output()
+    # Retorna o PDF gerado explicitamente em bytes compatível com o Streamlit
+    pdf_output = pdf.output(dest='S')
+    if isinstance(pdf_output, str):
+        return pdf_output.encode('latin1')
+    return bytes(pdf_output)
 
 # Botão de Download em PDF na interface principal
 st.markdown("---")
