@@ -155,7 +155,7 @@ def extrair_tabela_excel_inteligente(arquivo_excel):
         header_row_idx = 0
         for idx, row in df_raw.iterrows():
             row_str = " ".join([str(x) for x in row.values if pd.notna(x)]).lower()
-            if 'código' in row_str or 'codigo' in row_str or 'descrição' in row_str or 'vlr. unitário' in row_str or 'item' in row_str:
+            if 'código' in row_str or 'codigo' in row_str or 'descrição' in row_str or 'vlr' in row_str or 'item' in row_str:
                 header_row_idx = idx
                 break
                 
@@ -216,7 +216,7 @@ else:
     c_cod = achar_coluna(cotacao, ['código', 'codigo', 'produto', 'sku'])
     c_desc = achar_coluna(cotacao, ['descrição', 'descricao'])
     c_qtd = achar_coluna(cotacao, ['qtd', 'quantidade'])
-    c_vlr = achar_coluna(cotacao, ['vlr. unitário', 'vlr unitario', 'unitario', 'preço', 'preco'])
+    c_vlr = achar_coluna(cotacao, ['vlr. unitário', 'vlr unitario', 'unitario', 'preço', 'preco', 'vlr'])
     c_forn = achar_coluna(cotacao, ['fornecedor', 'empresa'])
     c_status = achar_coluna(cotacao, ['status'])
 
@@ -234,10 +234,9 @@ else:
     for idx, row in cotacao.iterrows():
         num_item = str(row[c_item] if c_item and pd.notna(row[c_item]) else f"{item_contador:04d}").zfill(4)
         
-        # Aplicação rigorosa da regra de 10 dígitos com zeros à esquerda
         raw_cod = str(row[c_cod] if c_cod and pd.notna(row[c_cod]) else f"SKU{item_contador}")
         codigo_original = padronizar_codigo_10_digitos(raw_cod)
-        codigo_busca = codigo_original # Já possui 10 dígitos padronizados
+        codigo_busca = codigo_original
         
         desc = str(row[c_desc] if c_desc and pd.notna(row[c_desc]) else 'Descrição não informada')
         qtd = limpar_valor(row[c_qtd] if c_qtd and pd.notna(row[c_qtd]) else 1)
@@ -257,7 +256,6 @@ else:
             for h_idx, h_row in historico.iterrows():
                 for col_idx in h_row.index:
                     val_celula = str(h_row[col_idx])
-                    # Padroniza também o código encontrado no histórico para comparar perfeitamente com 10 dígitos
                     if padronizar_codigo_10_digitos(val_celula) == codigo_busca and codigo_busca != '0000000000':
                         match_linhas.append(h_row)
                         break
