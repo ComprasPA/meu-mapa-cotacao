@@ -12,24 +12,16 @@ import time
 
 # Configuração da Página
 st.set_page_config(
-    page_title="Gestão Estratégica de Compras | Mapa de Cotação e Histórico",
+    page_title="Gestão Estratégica de Compras | Mapa de Cotação",
     page_icon="📊",
     layout="wide"
 )
 
-# Estilização visual corporativa com o estilo "Dados Bancários" (Azul Excel)
+# Estilização visual corporativa estilo Dados Bancários
 st.markdown("""
     <style>
     .main { background-color: #ffffff; }
-    h1 { color: #1f2c34; font-family: 'Helvetica Neue', sans-serif; margin-bottom: 0px; }
-    .subtitle-empresa {
-        color: #205081;
-        font-size: 18px;
-        font-weight: bold;
-        font-family: 'Helvetica Neue', sans-serif;
-        margin-top: 0px;
-        margin-bottom: 25px;
-    }
+    h1 { color: #1f2c34; font-family: 'Helvetica Neue', sans-serif; margin-bottom: 25px; }
     
     /* Estilização da Tabela no Estilo Dados Bancários */
     .dataframe {
@@ -38,7 +30,7 @@ st.markdown("""
         font-family: 'Helvetica Neue', sans-serif !important;
     }
     .dataframe th {
-        background-color: #2f5597 !important; /* Azul corporativo estilo Dados Bancários do Excel */
+        background-color: #2f5597 !important;
         color: white !important;
         text-align: center !important;
         font-weight: bold !important;
@@ -54,7 +46,7 @@ st.markdown("""
         text-align: right;
     }
     .dataframe tr:nth-child(even) {
-        background-color: #f2f5f9 !important; /* Linhas zebradas em tom azul bem suave */
+        background-color: #f2f5f9 !important;
     }
     .dataframe tr:nth-child(odd) {
         background-color: #ffffff !important;
@@ -65,9 +57,7 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-st.title("📊 Gestão Estratégica de Compras | Mapa de Cotação e Histórico")
-st.markdown('<p class="subtitle-empresa">Parente Andrade</p>', unsafe_allow_html=True)
-st.markdown("Plataforma analítica para homologação de preços, variação de custos e tomada de decisão comercial.")
+st.title("📊 Gestão Estratégica de Compras | Mapa de Cotação")
 
 # Barra lateral para upload de arquivos
 st.sidebar.header("📁 Fontes de Dados")
@@ -403,7 +393,6 @@ else:
         # Exibição do painel interativo formatado com classe CSS 'dataframe' (Estilo Dados Bancários)
         st.subheader("📋 Mapa de Cotação Consolidado & Comparativo Histórico")
 
-        # Converte para HTML adicionando a classe CSS para aplicar o estilo Dados Bancários
         html_tabela = df_display.to_html(escape=False, index=False, classes='dataframe')
         st.markdown(html_tabela, unsafe_allow_html=True)
 
@@ -415,7 +404,7 @@ else:
                 self.set_auto_page_break(auto=True, margin=25)
 
             def header(self):
-                self.set_fill_color(47, 85, 151) # Azul Dados Bancários (#2f5597)
+                self.set_fill_color(47, 85, 151)
                 self.rect(30, 10, 237, 22, 'F')
                 
                 self.set_font("helvetica", "B", 15)
@@ -435,20 +424,20 @@ else:
                 data_hora = datetime.datetime.now().strftime("%d/%m/%Y %H:%M")
                 self.cell(0, 10, limpar_texto_pdf(f"Gerado em {data_hora} | Pagina {self.page_no()}"), 0, 0, "C")
 
-        # Função para Gerar PDF do Relatório com colunas ajustadas à largura útil
+        # Função para Gerar PDF do Relatório com colunas ajustadas à largura útil exata (237mm)
         def gerar_pdf(df):
             pdf = PDFProfissional()
             pdf.add_page()
             
-            col_widths = [12, 23, 62, 12, 22, 50, 22, 50, 18, 16]
+            # Larguras somando exatamente 237 mm (largura útil A4 paisagem com margens de 3cm)
+            col_widths = [11, 22, 50, 11, 20, 38, 20, 38, 15, 12]
             headers = [
                 "Item", "Codigo", "Descricao", "Qtd", 
                 "Ult. Preco", "Forn. Ant.", "Novo Preco", 
                 "Forn. Novo", "Var(%)", "Tendencia"
             ]
             
-            # Cabeçalho da Tabela
-            pdf.set_fill_color(47, 85, 151) # Azul Dados Bancários
+            pdf.set_fill_color(47, 85, 151)
             pdf.set_text_color(255, 255, 255)
             pdf.set_font("helvetica", "B", 8)
             
@@ -456,13 +445,12 @@ else:
                 pdf.cell(col_widths[i], 8, limpar_texto_pdf(h), border=1, fill=True, align="C")
             pdf.ln()
             
-            # Dados da Tabela com efeito zebrado em tom azul suave
             pdf.set_font("helvetica", "", 7)
             
             fill = False
             for _, row in df.iterrows():
                 if fill:
-                    pdf.set_fill_color(242, 245, 249) # Tom azul suave estilo Dados Bancários
+                    pdf.set_fill_color(242, 245, 249)
                 else:
                     pdf.set_fill_color(255, 255, 255)
                     
@@ -472,12 +460,12 @@ else:
                 
                 pdf.cell(col_widths[0], 7, limpar_texto_pdf(str(row['Item'])), border=1, fill=fill, align="C")
                 pdf.cell(col_widths[1], 7, limpar_texto_pdf(str(row['Código'])), border=1, fill=fill, align="C")
-                pdf.cell(col_widths[2], 7, limpar_texto_pdf(str(row['Descrição Resumida'])[:35]), border=1, fill=fill, align="L")
+                pdf.cell(col_widths[2], 7, limpar_texto_pdf(str(row['Descrição Resumida'])[:32]), border=1, fill=fill, align="L")
                 pdf.cell(col_widths[3], 7, limpar_texto_pdf(str(row['Qtd'])), border=1, fill=fill, align="C")
                 pdf.cell(col_widths[4], 7, limpar_texto_pdf(formatar_brl(row['Último Preço Hist. (R$)'])), border=1, fill=fill, align="R")
-                pdf.cell(col_widths[5], 7, limpar_texto_pdf(str(row['Fornecedor do Último Preço'])[:25]), border=1, fill=fill, align="L")
+                pdf.cell(col_widths[5], 7, limpar_texto_pdf(str(row['Fornecedor do Último Preço'])[:22]), border=1, fill=fill, align="L")
                 pdf.cell(col_widths[6], 7, limpar_texto_pdf(formatar_brl(row['Novo Preço Unit. (R$)'])), border=1, fill=fill, align="R")
-                pdf.cell(col_widths[7], 7, limpar_texto_pdf(str(row['Fornecedor do Preço Novo'])[:25]), border=1, fill=fill, align="L")
+                pdf.cell(col_widths[7], 7, limpar_texto_pdf(str(row['Fornecedor do Preço Novo'])[:22]), border=1, fill=fill, align="L")
                 
                 if var_val < 0:
                     pdf.set_text_color(0, 128, 0)
