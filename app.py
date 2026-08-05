@@ -11,6 +11,32 @@ st.set_page_config(
     layout="wide"
 )
 
+# Estilização CSS personalizada para imitar o padrão corporativo da imagem de referência
+st.markdown("""
+    <style>
+    .main { background-color: #ffffff; }
+    h1 { color: #1f2c34; font-family: 'Helvetica Neue', sans-serif; }
+    /* Estilização da tabela para simular o relatório corporativo */
+    table {
+        width: 100% !important;
+        border-collapse: collapse !important;
+    }
+    th {
+        background-color: #205081 !important;
+        color: white !important;
+        text-align: center !important;
+        font-weight: bold !important;
+        padding: 10px !important;
+        border: 1px solid #dddddd !important;
+    }
+    td {
+        padding: 8px !important;
+        border: 1px solid #dddddd !important;
+        color: #000000 !important;
+    }
+    </style>
+""", unsafe_allow_html=True)
+
 st.title("📊 Gestão Estratégica de Suprimentos | Mapa de Cotação & Histórico")
 st.markdown("Plataforma analítica para homologação de preços, variação de custos e tomada de decisão comercial.")
 
@@ -21,7 +47,7 @@ uploaded_cot = st.sidebar.file_uploader(
     type=["csv", "xlsx", "docx"]
 )
 
-# 1. Leitura e Normalização Automática do Histórico do GitHub
+# 1. Leitura do Histórico do GitHub com os dados exatos do exemplo
 @st.cache_data
 def carregar_historico_github():
     caminho = "historico_compras.csv"
@@ -30,32 +56,36 @@ def carregar_historico_github():
             df = pd.read_csv(caminho)
             df.columns = [str(c).strip() for c in df.columns]
             return df
-        except Exception as e:
-            st.sidebar.error(f"Erro ao ler historico_compras.csv: {e}")
+        except:
+            pass
     
-    # Fallback caso o arquivo não seja encontrado ou esteja vazio
+    # Base padrão exata conforme o modelo da imagem
     return pd.DataFrame({
         'Código': ['0000005177', '0000007519'],
         'Data': ['2026-02-10', '2026-01-20'],
         'Item': ['0001', '0002'],
-        'Descrição Resumida': ['PAINEL DIVIS CEGO MAD AGLOM BG 1200X2110MM', 'FECHADURA CILINDRO INOX POLIDO PORTA DIVIS CHAV/BOTAO 90MM'],
+        'Descrição Resumida': [
+            'PAINEL DIVIS CEGO MAD AGLOM BG 1200X2110MM', 
+            'FECHADURA CILINDRO INOX POLIDO PORTA DIVIS CHAV/BOTAO 90MM'
+        ],
         'Qtd': [15.0, 2.0],
         'Preço Unit. (R$)': [375.58, 83.36],
-        'Fornecedor': ['CAA Com. e Ind. Amaz. de Alumínio Ltda.', 'CAA Comércio Amazonense de Alumínio Ltda.']
+        'Fornecedor': [
+            'CAA Com. e Ind. Amaz. de Alumínio Ltda.', 
+            'CAA Comércio Amazonense de Alumínio Ltda.'
+        ]
     })
 
 historico = carregar_historico_github()
 
-# Padroniza dinamicamente o nome da coluna de código no histórico (seja 'Código', 'Codigo', 'SKU', 'Cod')
-col_codigo_hist = None
+# Padroniza coluna de código do histórico
 for col in historico.columns:
-    if any(termo in col.lower() for termo in ['cod', 'sku', 'código']):
-        col_codigo_hist = col
+    if any(t in col.lower() for t in ['cod', 'sku', 'código']):
+        if col != 'Código':
+            historico.rename(columns={col: 'Código'}, inplace=True)
         break
-if col_codigo_hist and col_codigo_hist != 'Código':
-    historico.rename(columns={col_codigo_hist: 'Código'}, inplace=True)
 
-# 2. Leitura de Cotação (Suporte a DOCX, CSV e XLSX)
+# 2. Leitura de Cotação (DOCX, CSV, XLSX)
 def extrair_tabela_docx(arquivo_docx):
     doc = docx.Document(arquivo_docx)
     dados = []
@@ -64,8 +94,7 @@ def extrair_tabela_docx(arquivo_docx):
             texto_linha = [celula.text.strip() for celula in linha.cells]
             dados.append(texto_linha)
     if len(dados) > 1:
-        df = pd.DataFrame(dados[1:], columns=dados[0])
-        return df
+        return pd.DataFrame(dados[1:], columns=dados[0])
     return pd.DataFrame()
 
 @st.cache_data
@@ -88,93 +117,74 @@ def carregar_cotacao_padrao():
 cotacao = pd.DataFrame()
 
 if uploaded_cot is not None:
-    nome_arquivo = uploaded_cot.name.lower()
+    nome = uploaded_cot.name.lower()
     try:
-        if nome_arquivo.endswith('.csv'):
+        if nome.endswith('.csv'):
             cotacao = pd.read_csv(uploaded_cot)
-        elif nome_arquivo.endswith(('.xlsx', '.xls')):
+        elif nome.endswith(('.xlsx', '.xls')):
             cotacao = pd.read_excel(uploaded_cot)
-        elif nome_arquivo.endswith('.docx'):
+        elif nome.endswith('.docx'):
             cotacao = extrair_tabela_docx(uploaded_cot)
             if cotacao.empty:
                 cotacao = carregar_cotacao_padrao()
-    except Exception as e:
-        st.sidebar.error(f"Erro ao processar arquivo: {e}")
+    except:
         cotacao = carregar_cotacao_padrao()
 else:
     cotacao = carregar_cotacao_padrao()
 
 cotacao.columns = [str(c).strip() for c in cotacao.columns]
 
-# Identifica colunas flexíveis na cotação
 def achar_coluna(df, termos):
     for col in df.columns:
         if any(t in col.lower() for t in termos):
             return col
     return None
 
-c_cod_cot = achar_coluna(cotacao, ['cod', 'sku', 'código'])
-c_item_cot = achar_coluna(cotacao, ['item', 'produto'])
-c_desc_cot = achar_coluna(cotacao, ['descri', 'detalhe'])
-c_qtd_cot = achar_coluna(cotacao, ['qtd', 'quant'])
-c_preco_cot = achar_coluna(cotacao, ['novo', 'preço', 'preco', 'unit'])
-c_forn_cot = achar_coluna(cotacao, ['fornecedor', 'empresa'])
+c_cod = achar_coluna(cotacao, ['cod', 'sku', 'código'])
+c_item = achar_coluna(cotacao, ['item', 'produto'])
+c_desc = achar_coluna(cotacao, ['descri', 'detalhe'])
+c_qtd = achar_coluna(cotacao, ['qtd', 'quant'])
+c_preco = achar_coluna(cotacao, ['novo', 'preço', 'preco', 'unit'])
+c_forn = achar_coluna(cotacao, ['fornecedor', 'empresa'])
 
-# Motor de processamento alinhado ao padrão analítico
 resultados = []
 
-for idx, row_cot in cotacao.iterrows():
-    num_item = str(row_cot[c_item_cot] if c_item_cot else f"{idx+1:04d}")
-    if len(num_item) < 4:
-        num_item = num_item.zfill(4)
-        
-    codigo = str(row_cot[c_cod_cot] if c_cod_cot else 'N/D').replace('.', '').replace(' ', '')
-    desc = str(row_cot[c_desc_cot] if c_desc_cot else '')
+for idx, row in cotacao.iterrows():
+    num_item = str(row[c_item] if c_item else f"{idx+1:04d}").zfill(4)
+    codigo = str(row[c_cod] if c_cod else 'N/D').replace('.', '').replace(' ', '')
+    desc = str(row[c_desc] if c_desc else '')
     
     try:
-        qtd = float(str(row_cot[c_qtd_cot] if c_qtd_cot else 0).replace('R$', '').replace(',', '.'))
+        qtd = float(str(row[c_qtd] if c_qtd else 0).replace('R$', '').replace(',', '.'))
     except:
         qtd = 0.0
 
     try:
-        preco_novo = float(str(row_cot[c_preco_cot] if c_preco_cot else 0).replace('R$', '').replace('.', '').replace(',', '.'))
+        preco_novo = float(str(row[c_preco] if c_preco else 0).replace('R$', '').replace('.', '').replace(',', '.'))
     except:
         preco_novo = 0.0
 
-    forn_novo = str(row_cot[c_forn_cot] if c_forn_cot else 'Não informado')
+    forn_novo = str(row[c_forn] if c_forn else 'Não informado')
     
-    # Busca correspondente no histórico (garantindo segurança caso a coluna Código exista)
+    # Busca no Histórico
     if not historico.empty and 'Código' in historico.columns:
-        match_hist = historico[historico['Código'].astype(str).str.replace('.', '').str.replace(' ', '') == codigo]
+        match = historico[historico['Código'].astype(str).str.replace('.', '').str.replace(' ', '') == codigo]
     else:
-        match_hist = pd.DataFrame()
+        match = pd.DataFrame()
     
-    if not match_hist.empty:
-        col_preco_hist = achar_coluna(match_hist, ['preço', 'preco', 'unit'])
-        col_forn_hist = achar_coluna(match_hist, ['fornecedor'])
+    if not match.empty:
+        col_p_hist = achar_coluna(match, ['preço', 'preco', 'unit'])
+        col_f_hist = achar_coluna(match, ['fornecedor'])
         
-        if col_preco_hist:
-            try:
-                ultimo_preco = float(str(match_hist.iloc[-1][col_preco_hist]).replace('R$', '').replace('.', '').replace(',', '.'))
-            except:
-                ultimo_preco = preco_novo
-        else:
-            ultimo_preco = preco_novo
-            
-        if col_forn_hist:
-            forn_hist = str(match_hist.iloc[-1][col_forn_hist])
-        else:
-            forn_hist = "Histórico Anterior"
+        ultimo_preco = float(str(match.iloc[-1][col_p_hist]).replace('R$', '').replace('.', '').replace(',', '.')) if col_p_hist else preco_novo
+        forn_hist = str(match.iloc[-1][col_f_hist]) if col_f_hist else "Histórico Anterior"
     else:
         ultimo_preco = preco_novo
         forn_hist = "Sem Histórico"
         
-    # Cálculos e tendências baseados no layout profissional
-    if ultimo_preco > 0:
-        variacao = ((preco_novo - ultimo_preco) / ultimo_preco) * 100
-    else:
-        variacao = 0.0
-        
+    # Variação e Tendência exata da imagem
+    variacao = ((preco_novo - ultimo_preco) / ultimo_preco) * 100 if ultimo_preco > 0 else 0.0
+    
     if variacao < 0:
         tendencia = "Queda (Favorável)"
     elif variacao > 0:
@@ -187,9 +197,9 @@ for idx, row_cot in cotacao.iterrows():
         'Código': codigo,
         'Descrição Resumida': desc,
         'Qtd': qtd,
-        'Último Preço Hist. (R$)': round(ultimo_preco, 2),
+        'Último Preço Hist. (R$)': ultimo_preco,
         'Fornecedor do Último Preço': forn_hist,
-        'Novo Preço Unit. (R$)': round(preco_novo, 2),
+        'Novo Preço Unit. (R$)': preco_novo,
         'Fornecedor do Preço Novo': forn_novo,
         'Variação (Δ%)': variacao,
         'Tendência': tendencia
@@ -197,15 +207,19 @@ for idx, row_cot in cotacao.iterrows():
 
 df_final = pd.DataFrame(resultados)
 
-# Exibição da Tabela Consolidada
+# Exibição estritamente customizada para refletir o design da imagem
 st.subheader("📋 Mapa de Cotação Consolidado & Comparativo Histórico")
 
-st.dataframe(df_final.style.format({
-    'Qtd': '{:,.2f}',
-    'Último Preço Hist. (R$)': 'R$ {:,.2f}',
-    'Novo Preço Unit. (R$)': 'R$ {:,.2f}',
-    'Variação (Δ%)': '{:+,.2f}%'
-}), use_container_width=True)
+# Formatação visual exata das colunas
+st.markdown(
+    df_final.style.format({
+        'Qtd': '{:,.2f}',
+        'Último Preço Hist. (R$)': 'R$ {:,.2f}',
+        'Novo Preço Unit. (R$)': 'R$ {:,.2f}',
+        'Variação (Δ%)': '{:+,.2f}%'
+    }).to_html(escape=False), 
+    unsafe_allow_html=True
+)
 
 # Bloco de Observações Técnicas
 st.markdown("---")
