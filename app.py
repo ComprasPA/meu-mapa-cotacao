@@ -11,15 +11,12 @@ st.set_page_config(
     layout="wide"
 )
 
-# Estilização CSS personalizada para imitar o padrão corporativo da imagem de referência
+# Estilização visual corporativa
 st.markdown("""
     <style>
     .main { background-color: #ffffff; }
     h1 { color: #1f2c34; font-family: 'Helvetica Neue', sans-serif; }
-    table {
-        width: 100% !important;
-        border-collapse: collapse !important;
-    }
+    table { width: 100% !important; border-collapse: collapse !important; }
     th {
         background-color: #205081 !important;
         color: white !important;
@@ -48,7 +45,7 @@ uploaded_cot = st.sidebar.file_uploader(
     type=["csv", "xlsx", "docx"]
 )
 
-# 1. Leitura do Histórico do GitHub
+# 1. Leitura do histórico de compras do GitHub com validação de colunas exatas
 @st.cache_data
 def carregar_historico_github():
     caminho = "historico_compras.csv"
@@ -60,33 +57,20 @@ def carregar_historico_github():
         except:
             pass
     
-    # Base padrão exata conforme o modelo da imagem
+    # Fallback estruturado com as colunas exatas solicitadas
     return pd.DataFrame({
         'Código': ['0000005177', '0000007519'],
-        'Data': ['2026-02-10', '2026-01-20'],
-        'Item': ['0001', '0002'],
-        'Descrição Resumida': [
-            'PAINEL DIVIS CEGO MAD AGLOM BG 1200X2110MM', 
-            'FECHADURA CILINDRO INOX POLIDO PORTA DIVIS CHAV/BOTAO 90MM'
-        ],
-        'Qtd': [15.0, 2.0],
-        'Preço Unit. (R$)': [375.58, 83.36],
-        'Fornecedor': [
+        'Prc Unitario': [375.58, 83.36],
+        'Nome Fornece': [
             'CAA Com. e Ind. Amaz. de Alumínio Ltda.', 
             'CAA Comércio Amazonense de Alumínio Ltda.'
         ]
     })
 
 historico = carregar_historico_github()
+historico.columns = [str(c).strip() for c in historico.columns]
 
-# Padroniza coluna de código do histórico
-for col in historico.columns:
-    if any(t in col.lower() for t in ['cod', 'sku', 'código']):
-        if col != 'Código':
-            historico.rename(columns={col: 'Código'}, inplace=True)
-        break
-
-# 2. Leitura de Cotação (DOCX, CSV, XLSX)
+# 2. Leitura e extração do arquivo DOCX da Cotação
 def extrair_tabela_docx(arquivo_docx):
     doc = docx.Document(arquivo_docx)
     dados = []
@@ -108,8 +92,8 @@ def carregar_cotacao_padrao():
             'FECHADURA CILINDRO INOX POLIDO PORTA DIVIS CHAV/BOTAO 90MM'
         ],
         'Qtd': [15.00, 2.00],
-        'Novo Preço Unit. (R$)': [183.62, 70.07],
-        'Fornecedor do Preço Novo': [
+        'Vlr. Unitário': [183.62, 70.07],
+        'Fornecedor': [
             'CENTRO DO ALUMINIO INDUSTRIA E COMERCIO DE FERRAGENS, FERRAM', 
             'CENTRO DO ALUMINIO INDUSTRIA E COMERCIO DE FERRAGENS, FERRAM'
         ]
@@ -135,55 +119,66 @@ else:
 
 cotacao.columns = [str(c).strip() for c in cotacao.columns]
 
+# Funções de busca flexível para colunas opcionais ou mal formatadas
 def achar_coluna(df, termos):
     for col in df.columns:
-        if any(t in col.lower() for t in termos):
+        if any(t.lower() in col.lower() for t in termos):
             return col
     return None
 
-c_cod = achar_coluna(cotacao, ['cod', 'sku', 'código'])
-c_item = achar_coluna(cotacao, ['item', 'produto'])
-c_desc = achar_coluna(cotacao, ['descri', 'detalhe'])
-c_qtd = achar_coluna(cotacao, ['qtd', 'quant'])
-c_preco = achar_coluna(cotacao, ['novo', 'preço', 'preco', 'unit'])
+c_item = achar_coluna(cotacao, ['item'])
+c_cod = achar_coluna(cotacao, ['código', 'codigo', 'sku', 'cod'])
+c_desc = achar_coluna(cotacao, ['descri', 'resumida', 'detalhe'])
+c_qtd = achar_coluna(cotacao, ['qtd', 'quantidade', 'quant'])
+c_vlr = achar_coluna(cotacao, ['vlr. unitário', 'vlr unitario', 'preço', 'preco', 'unit'])
 c_forn = achar_coluna(cotacao, ['fornecedor', 'empresa'])
 
 resultados = []
 
 for idx, row in cotacao.iterrows():
-    num_item = str(row[c_item] if c_item else f"{idx+1:04d}").zfill(4)
-    codigo = str(row[c_cod] if c_cod else 'N/D').replace('.', '').replace(' ', '')
-    desc = str(row[c_desc] if c_desc else '')
+    num_item = str(row[c_item] if c_item and pd.notna(row[c_item]) else f"{idx+1:04d}").zfill(4)
+    codigo = str(row[c_cod] if c_cod and pd.notna(row[c_cod]) else 'N/D').replace('.', '').replace(' ', '')
+    desc = str(row[c_desc] if c_desc and pd.notna(row[c_desc]) else '')
     
     try:
-        qtd = float(str(row[c_qtd] if c_qtd else 0).replace('R$', '').replace(',', '.'))
+        qtd = float(str(row[c_qtd] if c_qtd and pd.notna(row[c_qtd]) else 0).replace('R$', '').replace(',', '.'))
     except:
         qtd = 0.0
 
+    # Novo Preço Unit. (R$) = Vlr. Unitário (arq docx)
     try:
-        preco_novo = float(str(row[c_preco] if c_preco else 0).replace('R$', '').replace('.', '').replace(',', '.'))
+        preco_novo = float(str(row[c_vlr] if c_vlr and pd.notna(row[c_vlr]) else 0).replace('R$', '').replace('.', '').replace(',', '.'))
     except:
         preco_novo = 0.0
 
-    forn_novo = str(row[c_forn] if c_forn else 'Não informado')
+    # Fornecedor do Preço Novo = Fornecedor (arq docx)
+    forn_novo = str(row[c_forn] if c_forn and pd.notna(row[c_forn]) else 'Não informado')
     
-    # Busca no Histórico
-    if not historico.empty and 'Código' in historico.columns:
-        match = historico[historico['Código'].astype(str).str.replace('.', '').str.replace(' ', '') == codigo]
-    else:
-        match = pd.DataFrame()
+    # Correlação com o histórico de compras do GitHub
+    match = pd.DataFrame()
+    if not historico.empty:
+        # Tenta achar a coluna de código no histórico
+        col_cod_hist = achar_coluna(historico, ['código', 'codigo', 'sku', 'cod'])
+        if col_cod_hist:
+            match = historico[historico[col_cod_hist].astype(str).str.replace('.', '').str.replace(' ', '') == codigo]
     
     if not match.empty:
-        col_p_hist = achar_coluna(match, ['preço', 'preco', 'unit'])
-        col_f_hist = achar_coluna(match, ['fornecedor'])
+        # Último Preço Hist. (R$) = Prc Unitario (historico_compras.csv)
+        col_prc_hist = achar_coluna(match, ['prc unitario', 'preco', 'preço', 'unit'])
+        # Fornecedor do Último Preço = Nome Fornece (historico_compras.csv)
+        col_forn_hist = achar_coluna(match, ['nome fornece', 'fornecedor'])
         
-        ultimo_preco = float(str(match.iloc[-1][col_p_hist]).replace('R$', '').replace('.', '').replace(',', '.')) if col_p_hist else preco_novo
-        forn_hist = str(match.iloc[-1][col_f_hist]) if col_f_hist else "Histórico Anterior"
+        try:
+            ultimo_preco = float(str(match.iloc[-1][col_prc_hist]).replace('R$', '').replace('.', '').replace(',', '.')) if col_prc_hist else preco_novo
+        except:
+            ultimo_preco = preco_novo
+            
+        forn_hist = str(match.iloc[-1][col_forn_hist]) if col_forn_hist else "Histórico Anterior"
     else:
         ultimo_preco = preco_novo
         forn_hist = "Sem Histórico"
         
-    # Variação e Tendência exata da imagem
+    # Variação (Δ%) e Tendência
     variacao = ((preco_novo - ultimo_preco) / ultimo_preco) * 100 if ultimo_preco > 0 else 0.0
     
     if variacao < 0:
@@ -208,7 +203,7 @@ for idx, row in cotacao.iterrows():
 
 df_final = pd.DataFrame(resultados)
 
-# Garantir a ordem exata das colunas solicitadas
+# Ordem exata solicitada pelo usuário
 colunas_exatas = [
     'Item', 
     'Código', 
@@ -224,7 +219,7 @@ colunas_exatas = [
 
 df_final = df_final[colunas_exatas]
 
-# Exibição estritamente customizada para refletir o design da imagem
+# Exibição do painel interativo formatado
 st.subheader("📋 Mapa de Cotação Consolidado & Comparativo Histórico")
 
 st.markdown(
@@ -237,7 +232,7 @@ st.markdown(
     unsafe_allow_html=True
 )
 
-# Bloco de Observações Técnicas
+# Bloco de Observações Técnicas (ZFM e Logística)
 st.markdown("---")
 st.subheader("🔍 Observações Logísticas e Fiscais (ZFM)")
 st.markdown("""
