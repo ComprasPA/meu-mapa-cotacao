@@ -49,7 +49,7 @@ uploaded_cot = st.sidebar.file_uploader(
     type=["csv", "xlsx", "docx"]
 )
 
-# Função auxiliar para limpeza rigorosa de valores monetários
+# Funções de Conversão e Formatação
 def limpar_valor(valor):
     if pd.isna(valor):
         return 0.0
@@ -72,22 +72,20 @@ def limpar_valor(valor):
     except:
         return 0.0
 
-# Formatação monetária padrão brasileiro (R$ X.XXX,XX)
 def formatar_brl(valor):
     return f"R$ {valor:,.2f}".replace(',', 'X').replace('.', ',').replace('X', '.')
 
-# Formatação percentual padrão brasileiro
 def formatar_pct(valor):
     return f"{valor:+,.2f}%".replace(',', 'X').replace('.', ',').replace('X', '.')
 
-# Função para padronizar códigos (remove zeros à esquerda, espaços e pontos para garantir match exato)
 def normalizar_codigo(codigo):
     if pd.isna(codigo):
         return ""
+    # Remove zeros à esquerda, espaços, pontos e hífens para garantir match perfeito entre arquivos
     limpo = str(codigo).replace('.', '').replace(' ', '').replace('-', '').strip()
     return limpo.lstrip('0') if limpo.lstrip('0') != '' else '0'
 
-# 1. Leitura robusta do histórico de compras do GitHub (historico_compras.csv)
+# 1. Leitura Direta e Robusta do historico_compras.csv do GitHub
 @st.cache_data
 def carregar_historico_github():
     caminho = "historico_compras.csv"
@@ -95,21 +93,23 @@ def carregar_historico_github():
         try:
             df = pd.read_csv(caminho)
             df.columns = [str(c).strip() for c in df.columns]
-            return df
+            return df, "Conectado com sucesso ao GitHub (historico_compras.csv)"
         except Exception as e:
-            st.sidebar.error(f"Erro ao carregar historico_compras.csv: {e}")
-    
-    return pd.DataFrame({
-        'Código': ['5177', '7519'],
-        'Prc Unitario': [375.58, 83.36],
-        'Nome Fornece': [
-            'CAA Com. e Ind. Amaz. de Alumínio Ltda.', 
-            'CAA Comércio Amazonense de Alumínio Ltda.'
-        ]
-    })
+            return pd.DataFrame(), f"Erro ao ler historico_compras.csv: {e}"
+    else:
+        # Fallback de demonstração caso o arquivo não seja encontrado na raiz
+        df = pd.DataFrame({
+            'Código': ['0000005177', '0000007519'],
+            'Prc Unitario': [375.58, 83.36],
+            'Nome Fornece': [
+                'CAA Com. e Ind. Amaz. de Alumínio Ltda.', 
+                'CAA Comércio Amazonense de Alumínio Ltda.'
+            ]
+        })
+        return df, "Arquivo historico_compras.csv não encontrado na raiz do GitHub. Usando dados padrão."
 
-historico = carregar_historico_github()
-historico.columns = [str(c).strip() for c in historico.columns]
+historico, status_historico = carregar_historico_github()
+st.sidebar.info(f"ℹ️ **Status do Histórico:** {status_historico}")
 
 # 2. Leitura e extração do arquivo DOCX da Cotação
 def extrair_tabela_docx(arquivo_docx):
@@ -185,12 +185,11 @@ for idx, row in cotacao.iterrows():
     preco_novo = limpar_valor(row[c_vlr] if c_vlr and pd.notna(row[c_vlr]) else 0)
     forn_novo = str(row[c_forn] if c_forn and pd.notna(row[c_forn]) else 'Não informado')
     
-    # Cruzamento otimizado com o histórico usando normalização de códigos
+    # Cruzamento avançado com o histórico do GitHub
     match = pd.DataFrame()
     if not historico.empty:
         col_cod_hist = achar_coluna(historico, ['código', 'codigo', 'sku', 'cod'])
         if col_cod_hist:
-            # Cria uma coluna temporária normalizada no histórico para comparar com precisão
             temp_hist = historico.copy()
             temp_hist['codigo_limpo'] = temp_hist[col_cod_hist].apply(normalizar_codigo)
             match = temp_hist[temp_hist['codigo_limpo'] == codigo_busca]
