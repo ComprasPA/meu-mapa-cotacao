@@ -147,56 +147,47 @@ def carregar_historico_github():
 historico, status_historico = carregar_historico_github()
 st.sidebar.info(f"ℹ️ **Status:** {status_historico}")
 
-# 2. Leitura inteligente de arquivos MHTML / HTML do TOTVS
+# 2. Leitura avançada e profunda de arquivos MHTML / HTML do TOTVS
 def extrair_tabela_mhtml(arquivo_bytes):
     try:
         conteudo_str = arquivo_bytes.getvalue().decode('utf-8', errors='ignore')
+        html_contents = []
         
-        # Se for MHTML multipart
         if "MIME-Version:" in conteudo_str or "multipart/related" in conteudo_str:
             msg = email.message_from_string(conteudo_str)
-            html_content = ""
             if msg.is_multipart():
                 for part in msg.walk():
                     if part.get_content_type() in ['text/html', 'application/xhtml+xml']:
                         payload = part.get_payload(decode=True)
                         if payload:
                             try:
-                                html_content += payload.decode('utf-8', errors='ignore')
+                                html_contents.append(payload.decode('utf-8', errors='ignore'))
                             except:
-                                html_content += payload.decode('latin-1', errors='ignore')
+                                html_contents.append(payload.decode('latin-1', errors='ignore'))
             else:
                 payload = msg.get_payload(decode=True)
                 if payload:
-                    html_content = payload.decode('utf-8', errors='ignore')
-            
-            if not html_content:
-                html_content = conteudo_str
+                    html_contents.append(payload.decode('utf-8', errors='ignore'))
         else:
-            html_content = conteudo_str
+            html_contents.append(conteudo_str)
 
-        # Extrai tabelas via BeautifulSoup
-        soup = BeautifulSoup(html_content, 'html.parser')
-        
-        # Procura por elementos de tabela tradicionais ou grids do TOTVS
-        tabelas = soup.find_all('table')
-        if not tabelas:
-            # Tenta procurar divs que simulam grids ou dataframes no webapp
-            tabelas = soup.find_all(['div'], class_=lambda x: x and ('grid' in x or 'table' in x or 'browse' in x))
-            
+        # Procura tabelas em todas as partes HTML encontradas no MHTML
         dfs = []
-        for tab in tabelas:
-            try:
-                df_list = pd.read_html(str(tab))
-                for d in df_list:
-                    if len(d) > 0 and len(d.columns) >= 2:
-                        dfs.append(d)
-            except:
-                continue
-                
+        for html_content in html_contents:
+            soup = BeautifulSoup(html_content, 'html.parser')
+            tabelas = soup.find_all('table')
+            for tab in tabelas:
+                try:
+                    df_list = pd.read_html(str(tab))
+                    for d in df_list:
+                        if len(d) > 0 and len(d.columns) >= 2:
+                            dfs.append(d)
+                except:
+                    continue
+                    
         if dfs:
-            # Retorna a maior tabela encontrada (geralmente o grid principal de cotação)
-            df_principal = max(dfs, key=len)
+            # Retorna a tabela mais completa (com maior número de linhas/colunas)
+            df_principal = max(dfs, key=lambda x: len(x) * len(x.columns))
             df_principal.columns = [str(c).strip() for c in df_principal.columns]
             return df_principal
             
