@@ -54,7 +54,7 @@ def limpar_valor(valor):
     if pd.isna(valor):
         return 0.0
     val_str = str(valor).replace('R$', '').strip()
-    if not val_str or val_str.lower() in ['nan', 'total item', 'total', '##########']:
+    if not val_str or val_str.lower() in ['nan', 'total item', 'total', '##########', 'a vista', '25 dias']:
         return 0.0
     
     if '.' in val_str and ',' in val_str:
@@ -99,23 +99,21 @@ def extrair_numeros(codigo):
     apenas_nums = ''.join(filter(str.isdigit, str(codigo)))
     return str(int(apenas_nums)) if apenas_nums.isdigit() else str(codigo).strip()
 
-# 1. Leitura do Histórico do GitHub
+# 1. Leitura do Histórico do GitHub (Sem cabeçalho fixo para respeitar as posições exatas das colunas do seu sistema)
 @st.cache_data
 def carregar_historico_github():
     caminho = "historico_compras.csv"
     if os.path.exists(caminho):
         try:
-            df = pd.read_csv(caminho, dtype=str)
-            df.columns = [str(c).strip() for c in df.columns]
+            df = pd.read_csv(caminho, header=None, dtype=str)
             return df, "Conectado com sucesso ao GitHub (historico_compras.csv)"
         except Exception as e:
             return pd.DataFrame(), f"Erro ao ler historico_compras.csv: {e}"
     else:
         df = pd.DataFrame({
-            'Produto': ['0000005177', '0000005177', '0000007519'],
-            'Prc Unitario': ['203.5525', '375.5800', '83.3645'],
-            'Nome Fornecedor': ['COMERCIO AMA', 'CAA COMERCIO AMAZONENSE DE ALUMINIO LTDA.', 'CAA COMERCIO'],
-            'Data': ['2026-01-10', '2026-03-15', '2026-02-01']
+            4: ['CAA COMERCIO AMAZONENSE DE ALUMINIO LTDA.'], # Coluna E = Fornecedor
+            6: ['0000005177'],                              # Coluna G = Código do Produto
+            10: ['375.58']                                   # Coluna K = Preço Unitário
         })
         return df, "historico_compras.csv não encontrado. Usando dados padrão."
 
@@ -226,7 +224,7 @@ for idx, row in cotacao.iterrows():
     codigo_busca = extrair_numeros(codigo_original)
     
     desc = str(row[c_desc] if c_desc and pd.notna(row[c_desc]) else 'Descrição não informada')
-    qtd = limpar_valor(row[c_qtd] if c_qtd and pd.notna(row[c_qtd]) else 1)
+    qtd = limpar_valor(row[c_qtd] if c_qtd and pd.notna(row[c_qtd]) == True else 1)
     preco_novo = limpar_valor(row[c_vlr] if c_vlr and pd.notna(row[c_vlr]) else 0)
     forn_novo = str(row[c_forn] if c_forn and pd.notna(row[c_forn]) else 'Fornecedor não informado')
     
@@ -237,61 +235,55 @@ for idx, row in cotacao.iterrows():
                 preco_novo = v_limpo
                 break
 
-    # Busca rigorosa da ÚLTIMA OCORRÊNCIA CRONOLÓGICA do código do item no histórico
+    # Busca estrita na base de histórico do GitHub mapeando exatamente as posições das colunas:
+    # Coluna G (índice 6) = Código do Produto
+    # Coluna K (índice 10) = Preço Unitário
+    # Coluna E (índice 4) = Nome do Fornecedor
     ultimo_preco = preco_novo
     forn_hist = "Sem Histórico"
     
     if not historico.empty:
-        col_prod_h, col_prc_h, col_forn_h, col_data_h = None, None, None, None
-        for h_col in historico.columns:
-            h_low = str(h_col).lower()
-            if any(k in h_low for k in ['produto', 'código', 'codigo', 'sku', 'cod']): col_prod_h = h_col
-            elif any(k in h_low for k in ['prc', 'preco', 'preço', 'unit']): col_prc_h = h_col
-            elif any(k in h_low for k in ['fornece', 'nome', 'empresa']): col_forn_h = h_col
-            elif any(k in h_low for k in ['data', 'dt', 'emissão', 'movimento']): col_data_h = h_col
-            
-        match_linhas = pd.DataFrame()
-        if col_prod_h:
-            match_linhas = historico[historico[col_prod_h].astype(str).apply(extrair_numeros) == codigo_busca]
-        else:
-            indices_validos = []
-            for h_idx, h_row in historico.iterrows():
-                for c_idx, val in enumerate(h_row.values):
-                    if extrair_numeros(str(val)) == codigo_busca and codigo_busca != '':
-                        indices_validos.append(h_idx)
-                        break
-            if indices_validos:
-                match_linhas = historico.iloc[indices_validos]
-                
-        if not match_linhas.empty:
-            # Se houver coluna de data, ordena cronologicamente para garantir que pegamos a última compra real do item
-            if col_data_h:
-                try:
-                    match_linhas = match_linhas.copy()
-                    match_linhas['data_convertida'] = pd.to_datetime(match_linhas[col_data_h], errors='coerce')
-                    match_linhas = match_linhas.sort_values(by='data_convertida', ascending=True)
-                except:
-                    pass
+        match_linhas = []
+        for h_idx, h_row in historico.iterrows():
+            # Verifica na coluna G (índice 6) ou em qualquer outra célula da linha se o código confere
+            for col_idx in h_row.index:
+                val_celula = str(h_row[col_idx])
+                if extrair_numeros(val_celula) == codigo_busca and codigo_busca != '':
+                    match_linhas.append(h_row)
+                    break
                     
-            # Pega estritamente a última linha do conjunto correspondente àquele código de item
-            ultima_ocorrencia = match_linhas.iloc[-1]
+        if match_linhas:
+            # Pega a última ocorrência cadastrada na base para este código
+            ultima_ocorrencia = match_linhas[-1]
             
-            if col_prc_h:
-                ultimo_preco = limpar_valor(ultima_ocorrencia[col_prc_h])
-            else:
-                for val in ultima_ocorrencia.values:
-                    v = limpar_valor(val)
-                    if v > 1.0 and v != qtd:
-                        ultimo_preco = v
-                        
-            if col_forn_h:
-                forn_hist = str(ultima_ocorrencia[col_forn_h])
-            else:
-                for val in ultima_ocorrencia.values:
-                    t = str(val)
-                    if len(t) > 5 and not any(char.isdigit() for char in t[:3]):
-                        forn_hist = t
-                        break
+            # Tenta extrair o preço da Coluna K (índice 10) se existir, senão busca o valor numérico válido
+            try:
+                preco_hist_col = limpar_valor(ultima_ocorrencia.get(10, 0))
+                if preco_hist_col > 0:
+                    ultimo_preco = preco_hist_col
+                else:
+                    # Varre procurando o valor unitário válido na linha
+                    for val in ultima_ocorrencia.values:
+                        v = limpar_valor(val)
+                        if v > 1.0 and v != qtd:
+                            ultimo_preco = v
+                            break
+            except:
+                pass
+                
+            # Tenta extrair o fornecedor da Coluna E (índice 4) se existir
+            try:
+                forn_col = str(ultima_ocorrencia.get(4, ""))
+                if len(forn_col) > 3 and forn_col.lower() not in ['nan', 'a vista', '25 dias']:
+                    forn_hist = forn_col
+                else:
+                    for val in ultima_ocorrencia.values:
+                        t = str(val)
+                        if len(t) > 5 and not any(char.isdigit() for char in t[:3]) and t.lower() not in ['a vista', '25 dias']:
+                            forn_hist = t
+                            break
+            except:
+                pass
         
     variacao = ((preco_novo - ultimo_preco) / ultimo_preco) * 100 if ultimo_preco > 0 else 0.0
     
