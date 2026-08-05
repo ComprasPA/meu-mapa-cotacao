@@ -8,6 +8,7 @@ import unicodedata
 import email
 from bs4 import BeautifulSoup
 import datetime
+import time
 
 # Configuração da Página
 st.set_page_config(
@@ -125,7 +126,7 @@ def limpar_texto_pdf(texto):
     texto_sem_acento = "".join([c for c in nfkd_form if not unicodedata.combining(c)])
     return texto_sem_acento.encode('latin-1', 'replace').decode('latin-1')
 
-# 1. Leitura do Histórico do GitHub com exibição no formato solicitado
+# 1. Leitura do Histórico do GitHub
 @st.cache_data
 def carregar_historico_github():
     caminho = "historico_compras.csv"
@@ -235,7 +236,6 @@ def extrair_tabela_docx_limpa(arquivo_docx):
 # O painel permanece limpo se nenhum arquivo for enviado
 cotacao = pd.DataFrame()
 if uploaded_cot is not None:
-    # st.spinner exibe o indicador "Loading..." animado e só some quando o bloco completo de processamento e renderização termina
     with st.spinner("Loading... Processando mapa de cotação e cruzando com o histórico..."):
         nome = uploaded_cot.name.lower()
         try:
@@ -349,9 +349,9 @@ else:
         variacao = ((preco_novo - ultimo_preco) / ultimo_preco) * 100 if ultimo_preco > 0 else 0.0
         
         if variacao < 0:
-            tendencia = "Queda (Favorável)"
+            tendencia = "Queda"
         elif variacao > 0:
-            tendencia = "Alta (Desfavorável)"
+            tendencia = "Alta"
         else:
             tendencia = "Estabilidade"
             
@@ -393,39 +393,92 @@ else:
 
         st.markdown(df_display.to_html(escape=False, index=False), unsafe_allow_html=True)
 
+        # Configuração da Classe do PDF Profissional
+        class PDFProfissional(FPDF):
+            def header(self):
+                # Fundo do cabeçalho
+                self.set_fill_color(32, 80, 129) # Azul Corporativo
+                self.rect(0, 0, 297, 28, 'F')
+                
+                # Títulos
+                self.set_font("helvetica", "B", 16)
+                self.set_text_color(255, 255, 255)
+                self.set_y(8)
+                self.cell(0, 8, limpar_texto_pdf("Mapa de Cotacao & Comparativo Historico"), 0, 1, "C")
+                
+                self.set_font("helvetica", "", 11)
+                self.set_y(16)
+                self.cell(0, 8, limpar_texto_pdf("Gestao Estrategica de Suprimentos | Parente Andrade"), 0, 1, "C")
+                self.ln(12)
+
+            def footer(self):
+                self.set_y(-15)
+                self.set_font("helvetica", "I", 8)
+                self.set_text_color(128, 128, 128)
+                data_hora = datetime.datetime.now().strftime("%d/%m/%Y %H:%M")
+                self.cell(0, 10, limpar_texto_pdf(f"Gerado em {data_hora} | Pagina {self.page_no()}"), 0, 0, "C")
+
         # Função para Gerar PDF do Relatório
         def gerar_pdf(df):
-            pdf = FPDF(orientation='L', unit='mm', format='A4')
+            pdf = PDFProfissional(orientation='L', unit='mm', format='A4')
             pdf.add_page()
-            pdf.set_font("helvetica", "B", 14)
-            pdf.cell(0, 10, limpar_texto_pdf("Mapa de Cotacao & Comparativo Historico - Suprimentos"), 0, 1, "C")
-            pdf.ln(5)
             
-            pdf.set_font("helvetica", "B", 8)
-            col_widths = [12, 25, 62, 15, 25, 45, 25, 45, 18, 20]
+            # Larguras das colunas
+            col_widths = [12, 23, 63, 12, 22, 50, 22, 50, 16, 18]
             headers = [
                 "Item", "Codigo", "Descricao", "Qtd", 
                 "Ult. Preco", "Forn. Ant.", "Novo Preco", 
-                "Forn. Novo", "Var (%)", "Tendencia"
+                "Forn. Novo", "Var(%)", "Tendencia"
             ]
             
+            # Cabeçalho da Tabela
+            pdf.set_fill_color(32, 80, 129)
+            pdf.set_text_color(255, 255, 255)
+            pdf.set_font("helvetica", "B", 8)
+            
             for i, h in enumerate(headers):
-                pdf.cell(col_widths[i], 7, limpar_texto_pdf(h), 1, 0, "C")
+                pdf.cell(col_widths[i], 8, limpar_texto_pdf(h), border=1, fill=True, align="C")
             pdf.ln()
             
+            # Dados da Tabela com efeito zebrado
             pdf.set_font("helvetica", "", 7)
+            
+            fill = False
             for _, row in df.iterrows():
-                pdf.cell(col_widths[0], 6, limpar_texto_pdf(str(row['Item'])), 1, 0, "C")
-                pdf.cell(col_widths[1], 6, limpar_texto_pdf(str(row['Código'])), 1, 0, "C")
-                pdf.cell(col_widths[2], 6, limpar_texto_pdf(str(row['Descrição Resumida'])[:35]), 1, 0, "L")
-                pdf.cell(col_widths[3], 6, limpar_texto_pdf(str(row['Qtd'])), 1, 0, "R")
-                pdf.cell(col_widths[4], 6, limpar_texto_pdf(formatar_brl(row['Último Preço Hist. (R$)'])), 1, 0, "R")
-                pdf.cell(col_widths[5], 6, limpar_texto_pdf(str(row['Fornecedor do Último Preço'])[:25]), 1, 0, "L")
-                pdf.cell(col_widths[6], 6, limpar_texto_pdf(formatar_brl(row['Novo Preço Unit. (R$)'])), 1, 0, "R")
-                pdf.cell(col_widths[7], 6, limpar_texto_pdf(str(row['Fornecedor do Preço Novo'])[:25]), 1, 0, "L")
-                pdf.cell(col_widths[8], 6, limpar_texto_pdf(formatar_pct(row['Variação (Δ%)'])), 1, 0, "R")
-                pdf.cell(col_widths[9], 6, limpar_texto_pdf(str(row['Tendência'])), 1, 0, "C")
+                # Define cor da linha (Zebrado)
+                if fill:
+                    pdf.set_fill_color(240, 245, 250) # Azul bem clarinho
+                else:
+                    pdf.set_fill_color(255, 255, 255) # Branco
+                    
+                pdf.set_text_color(0, 0, 0)
+                
+                # Validação de cor para Variação (Verde/Vermelho)
+                var_val = row['Variação (Δ%)']
+                tendencia = str(row['Tendência'])
+                
+                pdf.cell(col_widths[0], 7, limpar_texto_pdf(str(row['Item'])), border=1, fill=fill, align="C")
+                pdf.cell(col_widths[1], 7, limpar_texto_pdf(str(row['Código'])), border=1, fill=fill, align="C")
+                pdf.cell(col_widths[2], 7, limpar_texto_pdf(str(row['Descrição Resumida'])[:35]), border=1, fill=fill, align="L")
+                pdf.cell(col_widths[3], 7, limpar_texto_pdf(str(row['Qtd'])), border=1, fill=fill, align="C")
+                pdf.cell(col_widths[4], 7, limpar_texto_pdf(formatar_brl(row['Último Preço Hist. (R$)'])), border=1, fill=fill, align="R")
+                pdf.cell(col_widths[5], 7, limpar_texto_pdf(str(row['Fornecedor do Último Preço'])[:25]), border=1, fill=fill, align="L")
+                pdf.cell(col_widths[6], 7, limpar_texto_pdf(formatar_brl(row['Novo Preço Unit. (R$)'])), border=1, fill=fill, align="R")
+                pdf.cell(col_widths[7], 7, limpar_texto_pdf(str(row['Fornecedor do Preço Novo'])[:25]), border=1, fill=fill, align="L")
+                
+                # Célula de Variação com cor
+                if var_val < 0:
+                    pdf.set_text_color(0, 128, 0) # Verde
+                elif var_val > 0:
+                    pdf.set_text_color(200, 0, 0) # Vermelho
+                else:
+                    pdf.set_text_color(0, 0, 0) # Preto
+                
+                pdf.cell(col_widths[8], 7, limpar_texto_pdf(formatar_pct(var_val)), border=1, fill=fill, align="R")
+                pdf.cell(col_widths[9], 7, limpar_texto_pdf(tendencia), border=1, fill=fill, align="C")
+                
                 pdf.ln()
+                fill = not fill # Alterna o preenchimento para a próxima linha
                 
             pdf_output = pdf.output(dest='S')
             if isinstance(pdf_output, str):
