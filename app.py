@@ -73,7 +73,7 @@ def limpar_valor(valor):
     if pd.isna(valor):
         return 0.0
     val_str = str(valor).replace('R$', '').strip()
-    if not val_str or val_str.lower() in ['nan', 'total item', 'total', '##########', 'a vista', '25 dias']:
+    if not val_str or val_str.lower() in ['nan', 'total item', 'total', '##########', 'a vista', '25 dias', 'item', 'código', 'produto']:
         return 0.0
     
     if '.' in val_str and ',' in val_str:
@@ -146,38 +146,42 @@ def carregar_historico_github():
 historico, status_historico = carregar_historico_github()
 st.sidebar.info(f"ℹ️ **Status:** {status_historico}")
 
-# 2. Leitura inteligente de arquivos DOCX do TOTVS
-def extrair_tabela_docx_inteligente(arquivo_docx):
+# 2. Leitura inteligente e limpa de arquivos DOCX do TOTVS
+def extrair_tabela_docx_limpa(arquivo_docx):
     try:
         doc = docx.Document(arquivo_docx)
-        todas_linhas = []
+        linhas_validas = []
+        
         for tabela in doc.tables:
             for linha in tabela.rows:
-                texto_linha = [celula.text.strip().replace('\n', ' ') for celula in linha.cells]
-                if any(texto_linha):
-                    todas_linhas.append(texto_linha)
-                    
-        if len(todas_linhas) > 0:
-            cabecalho_idx = 0
-            for idx, linha in enumerate(todas_linhas[:5]):
-                texto_unido = " ".join(linha).lower()
-                if 'item' in texto_unido or 'codigo' in texto_unido or 'descrição' in texto_unido or 'unitário' in texto_unido:
-                    cabecalho_idx = idx
+                celulas = [cel.text.strip().replace('\n', ' ') for cel in linha.cells]
+                # Filtra apenas linhas que contêm conteúdo real e descarta cabeçalhos institucionais
+                texto_linha_unido = " ".join(celulas).lower()
+                if any(celulas) and not any(ignorar in texto_linha_unido for ignorar in ['parente andrade', 'departamento de suprimentos', 'mapa de cotacao']):
+                    # Verifica se a linha tem colunas suficientes para ser um item de produto
+                    if len(celulas) >= 3:
+                        linhas_validas.append(celulas)
+                        
+        if len(linhas_validas) > 0:
+            # Tenta achar a linha de cabeçalho real dos itens
+            inicio_dados = 0
+            for idx, l in enumerate(linhas_validas[:5]):
+                unido = " ".join(l).lower()
+                if 'código' in unido or 'codigo' in unido or 'descrição' in unido or 'unitário' in unido:
+                    inicio_dados = idx + 1
                     break
                     
-            headers = todas_linhas[cabecalho_idx]
-            dados = todas_linhas[cabecalho_idx+1:]
-            
+            dados = linhas_validas[inicio_dados:] if inicio_dados < len(linhas_validas) else linhas_validas
             if not dados:
-                return pd.DataFrame()
+                dados = linhas_validas
                 
-            df_temp = pd.DataFrame(dados)
-            if len(headers) < len(df_temp.columns):
-                headers = [f"Col_{i}" for i in range(len(df_temp.columns))]
-            elif len(headers) > len(df_temp.columns):
-                headers = headers[:len(df_temp.columns)]
-                
-            return pd.DataFrame(dados, columns=headers)
+            max_cols = max(len(l) for l in dados)
+            headers = [f"Col_{i}" for i in range(max_cols)]
+            
+            # Normaliza o tamanho das linhas
+            dados_norm = [l + [''] * (max_cols - len(l)) for l in dados]
+            return pd.DataFrame(dados_norm, columns=headers)
+            
     except Exception as e:
         st.error(f"Erro ao processar o documento Word: {e}")
     return pd.DataFrame()
@@ -192,7 +196,7 @@ if uploaded_cot is not None:
         elif nome.endswith(('.xlsx', '.xls')):
             cotacao = pd.read_excel(uploaded_cot)
         elif nome.endswith('.docx'):
-            cotacao = extrair_tabela_docx_inteligente(uploaded_cot)
+            cotacao = extrair_tabela_docx_limpa(uploaded_cot)
     except Exception as e:
         st.error(f"Erro ao ler arquivo: {e}")
         cotacao = pd.DataFrame()
@@ -203,56 +207,57 @@ if cotacao.empty:
 else:
     cotacao.columns = [str(c).strip() for c in cotacao.columns]
 
-    def identificar_colunas_docx(df):
-        col_item, col_cod, col_desc, col_qtd, col_vlr, col_forn = None, None, None, None, None, None
-        
-        for col in df.columns:
-            c_low = str(col).lower()
-            if 'item' in c_low and not col_item: col_item = col
-            elif any(k in c_low for k in ['cód', 'cod', 'sku']) and not col_cod: col_cod = col
-            elif any(k in c_low for k in ['descri', 'produto', 'material']) and not col_desc: col_desc = col
-            elif any(k in c_low for k in ['qtd', 'quant']) and not col_qtd: col_qtd = col
-            elif any(k in c_low for k in ['vlr', 'unit', 'preço', 'preco']) and not col_vlr: col_vlr = col
-            elif any(k in c_low for k in ['fornecedor', 'empresa', 'razão']) and not col_forn: col_forn = col
-
-        if not col_cod or not col_vlr:
-            for col in df.columns:
-                valores_serie = df[col].dropna()
-                if valores_serie.empty:
-                    continue
-                amostra = " ".join(valores_serie.astype(str).values).lower()
-                if not col_cod and any(str(digitos).isdigit() and len(str(digitos)) >= 4 for digitos in valores_serie):
-                    col_cod = col
-                if not col_vlr and 'r$' in amostra:
-                    col_vlr = col
-                    
-        return col_item, col_cod, col_desc, col_qtd, col_vlr, col_forn
-
-    c_item, c_cod, c_desc, c_qtd, c_vlr, c_forn = identificar_colunas_docx(cotacao)
-
     resultados = []
+    item_contador = 1
 
     for idx, row in cotacao.iterrows():
-        linha_texto = " ".join([str(v) for v in row.values]).lower()
-        if 'total' in linha_texto and not c_cod:
+        # Varre as células da linha para identificar dinamicamente: Código, Descrição, Qtd, Preço Novo e Fornecedor
+        celulas_str = [str(val).strip() for val in row.values if pd.notna(val) and str(val).strip() != '']
+        
+        if not celulas_str:
             continue
-
-        num_item = str(row[c_item] if c_item and pd.notna(row[c_item]) else f"{idx+1:04d}").zfill(4)
-        codigo_original = str(row[c_cod] if c_cod and pd.notna(row[c_cod]) else f"SKU{idx+1}")
+            
+        # Tenta identificar código (geralmente sequências numéricas longas ou SKUs)
+        codigo_original = ""
+        desc = "Descrição não informada"
+        qtd = 1.0
+        preco_novo = 0.0
+        forn_novo = "Fornecedor não informado"
+        
+        candidatos_numericos = []
+        candidatos_texto = []
+        candidatos_monetarios = []
+        
+        for val in celulas_str:
+            v_limpo = limpar_valor(val)
+            if v_limpo > 0 and ('r$' in val.lower() or ',' in val or '.' in val):
+                candidatos_monetarios.append(v_limpo)
+            elif val.isdigit() and len(val) >= 4:
+                codigo_original = val
+            elif len(val) > 4 and not val.isdigit():
+                candidatos_texto.append(val)
+                
+        if not codigo_original and celulas_str:
+            codigo_original = celulas_str[0]
+            
         codigo_busca = extrair_numeros(codigo_original)
         
-        desc = str(row[c_desc] if c_desc and pd.notna(row[c_desc]) else 'Descrição não informada')
-        qtd = limpar_valor(row[c_qtd] if c_qtd and pd.notna(row[c_qtd]) else 1)
-        preco_novo = limpar_valor(row[c_vlr] if c_vlr and pd.notna(row[c_vlr]) else 0)
-        forn_novo = str(row[c_forn] if c_forn and pd.notna(row[c_forn]) else 'Fornecedor não informado')
-        
-        if preco_novo == 0.0:
-            for val in row.values:
-                v_limpo = limpar_valor(val)
-                if v_limpo > 0 and v_limpo != qtd:
-                    preco_novo = v_limpo
-                    break
+        if candidatos_texto:
+            desc = candidatos_texto[0]
+            if len(candidatos_texto) > 1:
+                forn_novo = candidatos_texto[-1] # Pega o último texto longo como fornecedor provável
+                
+        if candidatos_monetarios:
+            preco_novo = candidatos_monetarios[-1] # O último valor monetário costuma ser o preço unitário ou total
+            
+        # Ignora linhas que sejam cabeçalhos repetidos
+        if codigo_original.lower() in ['código', 'codigo', 'item', 'produto'] or len(codigo_original) == 0:
+            continue
 
+        num_item = f"{item_contador:04d}"
+        item_contador += 1
+
+        # Busca rigorosa da última ocorrência do código no histórico
         ultimo_preco = preco_novo
         forn_hist = "Sem Histórico"
         
@@ -317,134 +322,137 @@ else:
 
     df_final = pd.DataFrame(resultados)
 
-    colunas_exatas = [
-        'Item', 'Código', 'Descrição Resumida', 'Qtd', 
-        'Último Preço Hist. (R$)', 'Fornecedor do Último Preço', 
-        'Novo Preço Unit. (R$)', 'Fornecedor do Preço Novo', 
-        'Variação (Δ%)', 'Tendência'
-    ]
-
-    df_final = df_final[colunas_exatas]
-
-    df_display = df_final.copy()
-    df_display['Qtd'] = df_display['Qtd'].apply(formatar_qtd)
-    df_display['Último Preço Hist. (R$)'] = df_display['Último Preço Hist. (R$)'].apply(formatar_brl)
-    df_display['Novo Preço Unit. (R$)'] = df_display['Novo Preço Unit. (R$)'].apply(formatar_brl)
-    df_display['Variação (Δ%)'] = df_display['Variação (Δ%)'].apply(formatar_pct)
-
-    # Exibição do painel interativo formatado
-    st.subheader("📋 Mapa de Cotação Consolidado & Comparativo Histórico")
-
-    st.markdown(df_display.to_html(escape=False, index=False), unsafe_allow_html=True)
-
-    # Função para Gerar PDF do Relatório com tratamento blindado
-    def gerar_pdf(df):
-        pdf = FPDF(orientation='L', unit='mm', format='A4')
-        pdf.add_page()
-        pdf.set_font("helvetica", "B", 14)
-        pdf.cell(0, 10, limpar_texto_pdf("Mapa de Cotacao & Comparativo Historico - Suprimentos"), 0, 1, "C")
-        pdf.ln(5)
-        
-        pdf.set_font("helvetica", "B", 8)
-        col_widths = [12, 22, 65, 15, 25, 45, 25, 45, 18, 20]
-        headers = [
-            "Item", "Codigo", "Descricao", "Qtd", 
-            "Ult. Preco", "Forn. Ant.", "Novo Preco", 
-            "Forn. Novo", "Var (%)", "Tendencia"
+    if df_final.empty:
+        st.warning("⚠️ Nenhum item de produto válido foi encontrado no arquivo carregado. Verifique se o arquivo está no formato correto.")
+    else:
+        colunas_exatas = [
+            'Item', 'Código', 'Descrição Resumida', 'Qtd', 
+            'Último Preço Hist. (R$)', 'Fornecedor do Último Preço', 
+            'Novo Preço Unit. (R$)', 'Fornecedor do Preço Novo', 
+            'Variação (Δ%)', 'Tendência'
         ]
-        
-        for i, h in enumerate(headers):
-            pdf.cell(col_widths[i], 7, limpar_texto_pdf(h), 1, 0, "C")
-        pdf.ln()
-        
-        pdf.set_font("helvetica", "", 7)
-        for _, row in df.iterrows():
-            pdf.cell(col_widths[0], 6, limpar_texto_pdf(str(row['Item'])), 1, 0, "C")
-            pdf.cell(col_widths[1], 6, limpar_texto_pdf(str(row['Código'])), 1, 0, "C")
-            pdf.cell(col_widths[2], 6, limpar_texto_pdf(str(row['Descrição Resumida'])[:35]), 1, 0, "L")
-            pdf.cell(col_widths[3], 6, limpar_texto_pdf(str(row['Qtd'])), 1, 0, "R")
-            pdf.cell(col_widths[4], 6, limpar_texto_pdf(formatar_brl(row['Último Preço Hist. (R$)'])), 1, 0, "R")
-            pdf.cell(col_widths[5], 6, limpar_texto_pdf(str(row['Fornecedor do Último Preço'])[:25]), 1, 0, "L")
-            pdf.cell(col_widths[6], 6, limpar_texto_pdf(formatar_brl(row['Novo Preço Unit. (R$)'])), 1, 0, "R")
-            pdf.cell(col_widths[7], 6, limpar_texto_pdf(str(row['Fornecedor do Preço Novo'])[:25]), 1, 0, "L")
-            pdf.cell(col_widths[8], 6, limpar_texto_pdf(formatar_pct(row['Variação (Δ%)'])), 1, 0, "R")
-            pdf.cell(col_widths[9], 6, limpar_texto_pdf(str(row['Tendência'])), 1, 0, "C")
+
+        df_final = df_final[colunas_exatas]
+
+        df_display = df_final.copy()
+        df_display['Qtd'] = df_display['Qtd'].apply(formatar_qtd)
+        df_display['Último Preço Hist. (R$)'] = df_display['Último Preço Hist. (R$)'].apply(formatar_brl)
+        df_display['Novo Preço Unit. (R$)'] = df_display['Novo Preço Unit. (R$)'].apply(formatar_brl)
+        df_display['Variação (Δ%)'] = df_display['Variação (Δ%)'].apply(formatar_pct)
+
+        # Exibição do painel interativo formatado
+        st.subheader("📋 Mapa de Cotação Consolidado & Comparativo Histórico")
+
+        st.markdown(df_display.to_html(escape=False, index=False), unsafe_allow_html=True)
+
+        # Função para Gerar PDF do Relatório com tratamento blindado
+        def gerar_pdf(df):
+            pdf = FPDF(orientation='L', unit='mm', format='A4')
+            pdf.add_page()
+            pdf.set_font("helvetica", "B", 14)
+            pdf.cell(0, 10, limpar_texto_pdf("Mapa de Cotacao & Comparativo Historico - Suprimentos"), 0, 1, "C")
+            pdf.ln(5)
+            
+            pdf.set_font("helvetica", "B", 8)
+            col_widths = [12, 22, 65, 15, 25, 45, 25, 45, 18, 20]
+            headers = [
+                "Item", "Codigo", "Descricao", "Qtd", 
+                "Ult. Preco", "Forn. Ant.", "Novo Preco", 
+                "Forn. Novo", "Var (%)", "Tendencia"
+            ]
+            
+            for i, h in enumerate(headers):
+                pdf.cell(col_widths[i], 7, limpar_texto_pdf(h), 1, 0, "C")
             pdf.ln()
             
-        pdf_output = pdf.output(dest='S')
-        if isinstance(pdf_output, str):
-            return pdf_output.encode('latin1')
-        return bytes(pdf_output)
-
-    # Botão de Download em PDF na interface principal
-    st.markdown("---")
-    col_bt1, col_bt2 = st.columns([2, 8])
-    with col_bt1:
-        pdf_bytes = gerar_pdf(df_final)
-        st.download_button(
-            label="📥 Baixar Mapa em PDF",
-            data=pdf_bytes,
-            file_name="mapa_de_cotacao_suprimentos.pdf",
-            mime="application/pdf"
-        )
-
-    # Seção de Painel Analítico & Estratégico com Gemini AI
-    st.markdown("---")
-    st.subheader("🤖 Painel Analítico & Executivo (Gerado por Gemini AI)")
-    
-    if st.button("✨ Executar Análise Comparativa e Montar Painel Executivo"):
-        with st.spinner("A Inteligência Artificial está processando as comparações de preços, fornecedores e montando o painel executivo..."):
-            try:
-                client = genai.Client(api_key=GEMINI_API_KEY)
+            pdf.set_font("helvetica", "", 7)
+            for _, row in df.iterrows():
+                pdf.cell(col_widths[0], 6, limpar_texto_pdf(str(row['Item'])), 1, 0, "C")
+                pdf.cell(col_widths[1], 6, limpar_texto_pdf(str(row['Código'])), 1, 0, "C")
+                pdf.cell(col_widths[2], 6, limpar_texto_pdf(str(row['Descrição Resumida'])[:35]), 1, 0, "L")
+                pdf.cell(col_widths[3], 6, limpar_texto_pdf(str(row['Qtd'])), 1, 0, "R")
+                pdf.cell(col_widths[4], 6, limpar_texto_pdf(formatar_brl(row['Último Preço Hist. (R$)'])), 1, 0, "R")
+                pdf.cell(col_widths[5], 6, limpar_texto_pdf(str(row['Fornecedor do Último Preço'])[:25]), 1, 0, "L")
+                pdf.cell(col_widths[6], 6, limpar_texto_pdf(formatar_brl(row['Novo Preço Unit. (R$)'])), 1, 0, "R")
+                pdf.cell(col_widths[7], 6, limpar_texto_pdf(str(row['Fornecedor do Preço Novo'])[:25]), 1, 0, "L")
+                pdf.cell(col_widths[8], 6, limpar_texto_pdf(formatar_pct(row['Variação (Δ%)'])), 1, 0, "R")
+                pdf.cell(col_widths[9], 6, limpar_texto_pdf(str(row['Tendência'])), 1, 0, "C")
+                pdf.ln()
                 
-                resumo_dados = df_final[['Código', 'Descrição Resumida', 'Qtd', 'Último Preço Hist. (R$)', 'Fornecedor do Último Preço', 'Novo Preço Unit. (R$)', 'Fornecedor do Preço Novo', 'Variação (Δ%)', 'Tendência']].to_string()
-                
-                prompt = (
-                    "Atue como um Especialista Sênior em Supply Chain, Gestão de Compras e Negociação Corporativa. "
-                    "Com base no mapa de cotação atual comparado estritamente ao histórico de compras abaixo:\n\n"
-                    f"{resumo_dados}\n\n"
-                    "Monte um **Painel Comparativo e Executivo** formatado em blocos claros com as seguintes seções:\n"
-                    "1. **Resumo Executivo do Cenário:** Visão geral da cotação frente ao histórico consolidado.\n"
-                    "2. **Quadro de Oportunidades (Ganhos de Margem / Reduções):** Destaque dos itens com variação favorável (queda) e os fornecedores envolvidos.\n"
-                    "3. **Matriz de Alertas e Riscos (Aumentos de Custo):** Análise crítica dos itens que apresentaram alta e diretrizes para renegociação urgente.\n"
-                    "4. **Recomendações Estratégicas Finais para Homologação:** Considerações logísticas, fiscais (ZFM) e fechamento de ordens de compra."
-                )
-                
-                response = client.models.generate_content(
-                    model='gemini-2.5-flash',
-                    contents=prompt,
-                )
-                
-                st.success("Painel Comparativo Estratégico gerado com sucesso!")
-                st.markdown(response.text)
-                
-            except Exception as e:
-                st.error(f"Erro ao comunicar com a API do Gemini: {e}")
+            pdf_output = pdf.output(dest='S')
+            if isinstance(pdf_output, str):
+                return pdf_output.encode('latin1')
+            return bytes(pdf_output)
 
-    # Bloco de Observações Técnicas (ZFM e Logística)
-    st.markdown("---")
-    st.subheader("🔍 Observações Logísticas e Fiscais (ZFM)")
-    st.markdown("""
-    * **Impacto Logístico:** Avaliação do custo total de frete (modal aéreo/fluvial) para suprimentos oriundos de 'Fora do Estado' em comparação com fornecedores locais de Manaus.
-    * **Incentivos Fiscais:** Validação da aplicação correta dos benefícios tributários da Zona Franca de Manaus (ZFM) para preservação de margem.
-    * **Picos Fora da Curva:** Análise crítica obrigatória em variações superiores a +5%, verificando oscilações de matéria-prima e custos logísticos antes da emissão da O.C.
-    """)
+        # Botão de Download em PDF na interface principal
+        st.markdown("---")
+        col_bt1, col_bt2 = st.columns([2, 8])
+        with col_bt1:
+            pdf_bytes = gerar_pdf(df_final)
+            st.download_button(
+                label="📥 Baixar Mapa em PDF",
+                data=pdf_bytes,
+                file_name="mapa_de_cotacao_suprimentos.pdf",
+                mime="application/pdf"
+            )
 
-    # Seção Obrigatória: Insight Rápido do Especialista Local
-    st.markdown("---")
-    st.subheader("💡 Insight Rápido do Especialista")
+        # Seção de Painel Analítico & Estratégico com Gemini AI
+        st.markdown("---")
+        st.subheader("🤖 Painel Analítico & Executivo (Gerado por Gemini AI)")
+        
+        if st.button("✨ Executar Análise Comparativa e Montar Painel Executivo"):
+            with st.spinner("A Inteligência Artificial está processando as comparações de preços, fornecedores e montando o painel executivo..."):
+                try:
+                    client = genai.Client(api_key=GEMINI_API_KEY)
+                    
+                    resumo_dados = df_final[['Código', 'Descrição Resumida', 'Qtd', 'Último Preço Hist. (R$)', 'Fornecedor do Último Preço', 'Novo Preço Unit. (R$)', 'Fornecedor do Preço Novo', 'Variação (Δ%)', 'Tendência']].to_string()
+                    
+                    prompt = (
+                        "Atue como um Especialista Sênior em Supply Chain, Gestão de Compras e Negociação Corporativa. "
+                        "Com base no mapa de cotação atual comparado estritamente ao histórico de compras abaixo:\n\n"
+                        f"{resumo_dados}\n\n"
+                        "Monte um **Painel Comparativo e Executivo** formatado em blocos claros com as seguintes seções:\n"
+                        "1. **Resumo Executivo do Cenário:** Visão geral da cotação frente ao histórico consolidado.\n"
+                        "2. **Quadro de Oportunidades (Ganhos de Margem / Reduções):** Destaque dos itens com variação favorável (queda) e os fornecedores envolvidos.\n"
+                        "3. **Matriz de Alertas e Riscos (Aumentos de Custo):** Análise crítica dos itens que apresentaram alta e diretrizes para renegociação urgente.\n"
+                        "4. **Recomendações Estratégicas Finais para Homologação:** Considerações logísticas, fiscais (ZFM) e fechamento de ordens de compra."
+                    )
+                    
+                    response = client.models.generate_content(
+                        model='gemini-2.5-flash',
+                        contents=prompt,
+                    )
+                    
+                    st.success("Painel Comparativo Estratégico gerado com sucesso!")
+                    st.markdown(response.text)
+                    
+                except Exception as e:
+                    st.error(f"Erro ao comunicar com a API do Gemini: {e}")
 
-    itens_em_queda = df_final[df_final['Variação (Δ%)'] < 0]
-    if not itens_em_queda.empty:
-        insight_texto = (
-            f"Identificada oportunidade expressiva de economia em **{len(itens_em_queda)} item(ns)** com redução de custos favorável. "
-            "Recomenda-se a **homologação imediata com o novo fornecedor** para captura dos ganhos de margem, "
-            "certificando-se de que os prazos de entrega e condições logísticas para Manaus atendem ao cronograma operacional."
-        )
-    else:
-        insight_texto = (
-            "Cenário de alta nos preços detectado. Recomenda-se a **renegociação com base no histórico de volume** "
-            "ou busca por fornecedores alternativos na praça local para evitar impacto no orçamento."
-        )
+        # Bloco de Observações Técnicas (ZFM e Logística)
+        st.markdown("---")
+        st.subheader("🔍 Observações Logísticas e Fiscais (ZFM)")
+        st.markdown("""
+        * **Impacto Logístico:** Avaliação do custo total de frete (modal aéreo/fluvial) para suprimentos oriundos de 'Fora do Estado' em comparação com fornecedores locais de Manaus.
+        * **Incentivos Fiscais:** Validação da aplicação correta dos benefícios tributários da Zona Franca de Manaus (ZFM) para preservação de margem.
+        * **Picos Fora da Curva:** Análise crítica obrigatória em variações superiores a +5%, verificando oscilações de matéria-prima e custos logísticos antes da emissão da O.C.
+        """)
 
-    st.success(insight_texto)
+        # Seção Obrigatória: Insight Rápido do Especialista Local
+        st.markdown("---")
+        st.subheader("💡 Insight Rápido do Especialista")
+
+        itens_em_queda = df_final[df_final['Variação (Δ%)'] < 0]
+        if not itens_em_queda.empty:
+            insight_texto = (
+                f"Identificada oportunidade expressiva de economia em **{len(itens_em_queda)} item(ns)** com redução de custos favorável. "
+                "Recomenda-se a **homologação imediata com o novo fornecedor** para captura dos ganhos de margem, "
+                "certificando-se de que os prazos de entrega e condições logísticas para Manaus atendem ao cronograma operacional."
+            )
+        else:
+            insight_texto = (
+                "Cenário de alta nos preços detectado. Recomenda-se a **renegociação com base no histórico de volume** "
+                "ou busca por fornecedores alternativos na praça local para evitar impacto no orçamento."
+            )
+
+        st.success(insight_texto)
