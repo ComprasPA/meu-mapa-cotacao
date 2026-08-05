@@ -24,12 +24,6 @@ st.markdown("""
     h1 { color: #1f2c34; font-family: 'Helvetica Neue', sans-serif; margin-bottom: 5px; }
     
     /* Cabeçalho alinhado com status à direita */
-    .top-header {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        margin-bottom: 20px;
-    }
     .status-badge {
         background-color: #e8f0fe;
         color: #1967d2;
@@ -102,16 +96,7 @@ def carregar_historico_github():
 
 historico, status_historico = carregar_historico_github()
 
-# Topo do App: Título e Status no canto superior direito
-col_title, col_status = st.columns([7, 3])
-with col_title:
-    st.title("📊 Gestão Estratégica de Compras | Mapa de Cotação")
-with col_status:
-    st.markdown(f"<div style='text-align: right; margin-top: 15px;'><span class='status-badge'>ℹ️ {status_historico}</span></div>", unsafe_allow_html=True)
-
-st.markdown("---")
-
-# Caixa Oculta (Abre / Fecha) para Upload, Data Base e Temas
+# Caixa Oculta (Abre / Fecha) posicionada acima do título do app
 with st.expander("⚙️ Abrir / Fechar Configurações (Upload, Data Base e Tema)", expanded=False):
     col_exp1, col_exp2 = st.columns([2, 1])
     
@@ -124,11 +109,19 @@ with st.expander("⚙️ Abrir / Fechar Configurações (Upload, Data Base e Tem
         
     with col_exp2:
         st.markdown("### 🎨 Tema do Sistema")
-        tema_selecionado = st.selectbox(
+        _ = st.selectbox(
             "Selecione o Estilo Visual",
             ["Dados Bancários (Padrão)", "Corporativo Azul Limpo", "Modo Compacto"]
         )
-        st.info(f"Tema ativo: **{tema_selecionado}**")
+
+st.markdown("---")
+
+# Topo do App: Título e Status no canto superior direito
+col_title, col_status = st.columns([7, 3])
+with col_title:
+    st.title("📊 Gestão Estratégica de Compras | Mapa de Cotação")
+with col_status:
+    st.markdown(f"<div style='text-align: right; margin-top: 15px;'><span class='status-badge'>ℹ️ {status_historico}</span></div>", unsafe_allow_html=True)
 
 st.markdown("---")
 
