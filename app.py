@@ -396,41 +396,43 @@ else:
         html_tabela = df_display.to_html(escape=False, index=False, classes='dataframe')
         st.markdown(html_tabela, unsafe_allow_html=True)
 
-        # Configuração da Classe do PDF Profissional com Margens Exatas (Esq/Dir: 3cm, Sup/Inf: 2.5cm)
+        # Configuração da Classe do PDF com Margens Estreitas (Esq/Dir: 0.64cm = 6.4mm, Sup/Inf: 1.91cm = 19.1mm)
         class PDFProfissional(FPDF):
             def __init__(self):
                 super().__init__(orientation='L', unit='mm', format='A4')
-                self.set_margins(left=30, top=25, right=30)
-                self.set_auto_page_break(auto=True, margin=25)
+                # Margens estreitas: Esquerda = 6.4mm, Superior = 19.1mm, Direita = 6.4mm
+                self.set_margins(left=6.4, top=19.1, right=6.4)
+                self.set_auto_page_break(auto=True, margin=19.1) # Margem inferior = 19.1mm
 
             def header(self):
+                # Largura útil total A4 paisagem = 297mm - (2 * 6.4mm) = 284.2mm
                 self.set_fill_color(47, 85, 151)
-                self.rect(30, 10, 237, 22, 'F')
+                self.rect(6.4, 8, 284.2, 20, 'F')
                 
-                self.set_font("helvetica", "B", 15)
+                self.set_font("helvetica", "B", 14)
                 self.set_text_color(255, 255, 255)
-                self.set_xy(30, 12)
-                self.cell(237, 7, limpar_texto_pdf("Mapa de Cotacao & Comparativo Historico"), 0, 1, "C")
+                self.set_xy(6.4, 10)
+                self.cell(284.2, 6, limpar_texto_pdf("Mapa de Cotacao & Comparativo Historico"), 0, 1, "C")
                 
-                self.set_font("helvetica", "", 10)
-                self.set_xy(30, 19)
-                self.cell(237, 6, limpar_texto_pdf("Gestao Estratégica de Compras | Parente Andrade"), 0, 1, "C")
-                self.ln(12)
+                self.set_font("helvetica", "", 9)
+                self.set_xy(6.4, 16)
+                self.cell(284.2, 5, limpar_texto_pdf("Gestao Estratégica de Compras | Parente Andrade"), 0, 1, "C")
+                self.ln(10)
 
             def footer(self):
-                self.set_y(-15)
+                self.set_y(-12)
                 self.set_font("helvetica", "I", 8)
                 self.set_text_color(128, 128, 128)
                 data_hora = datetime.datetime.now().strftime("%d/%m/%Y %H:%M")
-                self.cell(0, 10, limpar_texto_pdf(f"Gerado em {data_hora} | Pagina {self.page_no()}"), 0, 0, "C")
+                self.cell(0, 8, limpar_texto_pdf(f"Gerado em {data_hora} | Pagina {self.page_no()}"), 0, 0, "C")
 
-        # Função para Gerar PDF do Relatório com colunas ajustadas à largura útil exata (237mm)
+        # Função para Gerar PDF do Relatório com colunas ajustadas à largura útil de margens estreitas (284.2mm)
         def gerar_pdf(df):
             pdf = PDFProfissional()
             pdf.add_page()
             
-            # Larguras somando exatamente 237 mm (largura útil A4 paisagem com margens de 3cm)
-            col_widths = [11, 22, 50, 11, 20, 38, 20, 38, 15, 12]
+            # Larguras somando exatamente 284.2 mm (largura útil com margens estreitas de 0.64cm)
+            col_widths = [13, 27, 72, 13, 26, 60, 26, 60, 15, 12]
             headers = [
                 "Item", "Codigo", "Descricao", "Qtd", 
                 "Ult. Preco", "Forn. Ant.", "Novo Preco", 
@@ -442,7 +444,7 @@ else:
             pdf.set_font("helvetica", "B", 8)
             
             for i, h in enumerate(headers):
-                pdf.cell(col_widths[i], 8, limpar_texto_pdf(h), border=1, fill=True, align="C")
+                pdf.cell(col_widths[i], 7, limpar_texto_pdf(h), border=1, fill=True, align="C")
             pdf.ln()
             
             pdf.set_font("helvetica", "", 7)
@@ -458,14 +460,14 @@ else:
                 var_val = row['Variação (Δ%)']
                 tendencia = str(row['Tendência'])
                 
-                pdf.cell(col_widths[0], 7, limpar_texto_pdf(str(row['Item'])), border=1, fill=fill, align="C")
-                pdf.cell(col_widths[1], 7, limpar_texto_pdf(str(row['Código'])), border=1, fill=fill, align="C")
-                pdf.cell(col_widths[2], 7, limpar_texto_pdf(str(row['Descrição Resumida'])[:32]), border=1, fill=fill, align="L")
-                pdf.cell(col_widths[3], 7, limpar_texto_pdf(str(row['Qtd'])), border=1, fill=fill, align="C")
-                pdf.cell(col_widths[4], 7, limpar_texto_pdf(formatar_brl(row['Último Preço Hist. (R$)'])), border=1, fill=fill, align="R")
-                pdf.cell(col_widths[5], 7, limpar_texto_pdf(str(row['Fornecedor do Último Preço'])[:22]), border=1, fill=fill, align="L")
-                pdf.cell(col_widths[6], 7, limpar_texto_pdf(formatar_brl(row['Novo Preço Unit. (R$)'])), border=1, fill=fill, align="R")
-                pdf.cell(col_widths[7], 7, limpar_texto_pdf(str(row['Fornecedor do Preço Novo'])[:22]), border=1, fill=fill, align="L")
+                pdf.cell(col_widths[0], 6, limpar_texto_pdf(str(row['Item'])), border=1, fill=fill, align="C")
+                pdf.cell(col_widths[1], 6, limpar_texto_pdf(str(row['Código'])), border=1, fill=fill, align="C")
+                pdf.cell(col_widths[2], 6, limpar_texto_pdf(str(row['Descrição Resumida'])[:42]), border=1, fill=fill, align="L")
+                pdf.cell(col_widths[3], 6, limpar_texto_pdf(str(row['Qtd'])), border=1, fill=fill, align="C")
+                pdf.cell(col_widths[4], 6, limpar_texto_pdf(formatar_brl(row['Último Preço Hist. (R$)'])), border=1, fill=fill, align="R")
+                pdf.cell(col_widths[5], 6, limpar_texto_pdf(str(row['Fornecedor do Último Preço'])[:30]), border=1, fill=fill, align="L")
+                pdf.cell(col_widths[6], 6, limpar_texto_pdf(formatar_brl(row['Novo Preço Unit. (R$)'])), border=1, fill=fill, align="R")
+                pdf.cell(col_widths[7], 6, limpar_texto_pdf(str(row['Fornecedor do Preço Novo'])[:30]), border=1, fill=fill, align="L")
                 
                 if var_val < 0:
                     pdf.set_text_color(0, 128, 0)
@@ -474,8 +476,8 @@ else:
                 else:
                     pdf.set_text_color(0, 0, 0)
                 
-                pdf.cell(col_widths[8], 7, limpar_texto_pdf(formatar_pct(var_val)), border=1, fill=fill, align="R")
-                pdf.cell(col_widths[9], 7, limpar_texto_pdf(tendencia), border=1, fill=fill, align="C")
+                pdf.cell(col_widths[8], 6, limpar_texto_pdf(formatar_pct(var_val)), border=1, fill=fill, align="R")
+                pdf.cell(col_widths[9], 6, limpar_texto_pdf(tendencia), border=1, fill=fill, align="C")
                 
                 pdf.ln()
                 fill = not fill
