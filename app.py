@@ -115,11 +115,13 @@ def extrair_numeros(codigo):
     return str(int(apenas_nums)) if apenas_nums.isdigit() else str(codigo).strip()
 
 def limpar_texto_pdf(texto):
-    """Remove acentos e caracteres incompatíveis com o motor padrão do FPDF2"""
+    """Remove acentos, caracteres especiais e converte de forma segura para o PDF"""
     if not isinstance(texto, str):
         texto = str(texto)
     nfkd_form = unicodedata.normalize('NFKD', texto)
-    return "".join([c for c in nfkd_form if not unicodedata.combining(c)])
+    texto_sem_acento = "".join([c for c in nfkd_form if not unicodedata.combining(c)])
+    # Força a codificação para latin-1 substituindo qualquer caractere estranho remanescente
+    return texto_sem_acento.encode('latin-1', 'replace').decode('latin-1')
 
 # 1. Leitura do Histórico do GitHub
 @st.cache_data
@@ -333,7 +335,7 @@ else:
 
     st.markdown(df_display.to_html(escape=False, index=False), unsafe_allow_html=True)
 
-    # Função para Gerar PDF do Relatório com tratamento blindado de caracteres especiais
+    # Função para Gerar PDF do Relatório com tratamento blindado
     def gerar_pdf(df):
         pdf = FPDF(orientation='L', unit='mm', format='A4')
         pdf.add_page()
