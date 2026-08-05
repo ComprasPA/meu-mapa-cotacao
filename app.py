@@ -51,6 +51,7 @@ st.markdown("""
     .dataframe tr:nth-child(odd) {
         background-color: #ffffff !important;
     }
+    /* Ajuste de alinhamento esquerdo para colunas textuais */
     .dataframe td:nth-child(1), .dataframe td:nth-child(2), .dataframe td:nth-child(3), .dataframe td:nth-child(6), .dataframe td:nth-child(8), .dataframe td:nth-child(10) {
         text-align: left;
     }
@@ -362,10 +363,10 @@ else:
             'Código': codigo_original,
             'Descrição Resumida': desc,
             'Qtd': qtd,
-            'Último Preço Hist. (R$)': ultimo_preco,
-            'Fornecedor do Último Preço': forn_hist,
             'Novo Preço Unit. (R$)': preco_novo,
             'Fornecedor do Preço Novo': forn_novo,
+            'Último Preço Hist. (R$)': ultimo_preco,
+            'Fornecedor do Último Preço': forn_hist,
             'Variação (Δ%)': variacao,
             'Tendência': tendencia
         })
@@ -375,10 +376,11 @@ else:
     if df_final.empty:
         st.warning("⚠️ Nenhum item válido encontrado. Verifique o arquivo carregado.")
     else:
+        # Ordem invertida: Novo preço e fornecedor novo vêm na frente
         colunas_exatas = [
             'Item', 'Código', 'Descrição Resumida', 'Qtd', 
-            'Último Preço Hist. (R$)', 'Fornecedor do Último Preço', 
-            'Novo Preço Unit. (R$)', 'Fornecedor do Preço Novo', 
+            'Novo Preço Unit. (R$)', 'Fornecedor do Preço Novo',
+            'Último Preço Hist. (R$)', 'Fornecedor do Último Preço',  
             'Variação (Δ%)', 'Tendência'
         ]
 
@@ -386,8 +388,8 @@ else:
 
         df_display = df_final.copy()
         df_display['Qtd'] = df_display['Qtd'].apply(formatar_qtd)
-        df_display['Último Preço Hist. (R$)'] = df_display['Último Preço Hist. (R$)'].apply(formatar_brl)
         df_display['Novo Preço Unit. (R$)'] = df_display['Novo Preço Unit. (R$)'].apply(formatar_brl)
+        df_display['Último Preço Hist. (R$)'] = df_display['Último Preço Hist. (R$)'].apply(formatar_brl)
         df_display['Variação (Δ%)'] = df_display['Variação (Δ%)'].apply(formatar_pct)
 
         # Exibição do painel interativo formatado com classe CSS 'dataframe' (Estilo Dados Bancários)
@@ -400,12 +402,10 @@ else:
         class PDFProfissional(FPDF):
             def __init__(self):
                 super().__init__(orientation='L', unit='mm', format='A4')
-                # Margens estreitas: Esquerda = 6.4mm, Superior = 19.1mm, Direita = 6.4mm
                 self.set_margins(left=6.4, top=19.1, right=6.4)
-                self.set_auto_page_break(auto=True, margin=19.1) # Margem inferior = 19.1mm
+                self.set_auto_page_break(auto=True, margin=19.1)
 
             def header(self):
-                # Largura útil total A4 paisagem = 297mm - (2 * 6.4mm) = 284.2mm
                 self.set_fill_color(47, 85, 151)
                 self.rect(6.4, 8, 284.2, 20, 'F')
                 
@@ -426,17 +426,17 @@ else:
                 data_hora = datetime.datetime.now().strftime("%d/%m/%Y %H:%M")
                 self.cell(0, 8, limpar_texto_pdf(f"Gerado em {data_hora} | Pagina {self.page_no()}"), 0, 0, "C")
 
-        # Função para Gerar PDF do Relatório com colunas ajustadas à largura útil de margens estreitas (284.2mm)
+        # Função para Gerar PDF do Relatório com colunas somando exatamente 284mm
         def gerar_pdf(df):
             pdf = PDFProfissional()
             pdf.add_page()
             
-            # Larguras somando exatamente 284.2 mm (largura útil com margens estreitas de 0.64cm)
-            col_widths = [13, 27, 72, 13, 26, 60, 26, 60, 15, 12]
+            # Larguras somando exatamente 284 mm (dentro da largura útil de 284.2 mm)
+            col_widths = [10, 22, 60, 10, 20, 50, 20, 50, 21, 21]
             headers = [
                 "Item", "Codigo", "Descricao", "Qtd", 
-                "Ult. Preco", "Forn. Ant.", "Novo Preco", 
-                "Forn. Novo", "Var(%)", "Tendencia"
+                "Novo Preco", "Forn. Novo", "Ult. Preco", 
+                "Forn. Ant.", "Var(%)", "Tendencia"
             ]
             
             pdf.set_fill_color(47, 85, 151)
@@ -462,12 +462,12 @@ else:
                 
                 pdf.cell(col_widths[0], 6, limpar_texto_pdf(str(row['Item'])), border=1, fill=fill, align="C")
                 pdf.cell(col_widths[1], 6, limpar_texto_pdf(str(row['Código'])), border=1, fill=fill, align="C")
-                pdf.cell(col_widths[2], 6, limpar_texto_pdf(str(row['Descrição Resumida'])[:42]), border=1, fill=fill, align="L")
+                pdf.cell(col_widths[2], 6, limpar_texto_pdf(str(row['Descrição Resumida'])[:40]), border=1, fill=fill, align="L")
                 pdf.cell(col_widths[3], 6, limpar_texto_pdf(str(row['Qtd'])), border=1, fill=fill, align="C")
-                pdf.cell(col_widths[4], 6, limpar_texto_pdf(formatar_brl(row['Último Preço Hist. (R$)'])), border=1, fill=fill, align="R")
-                pdf.cell(col_widths[5], 6, limpar_texto_pdf(str(row['Fornecedor do Último Preço'])[:30]), border=1, fill=fill, align="L")
-                pdf.cell(col_widths[6], 6, limpar_texto_pdf(formatar_brl(row['Novo Preço Unit. (R$)'])), border=1, fill=fill, align="R")
-                pdf.cell(col_widths[7], 6, limpar_texto_pdf(str(row['Fornecedor do Preço Novo'])[:30]), border=1, fill=fill, align="L")
+                pdf.cell(col_widths[4], 6, limpar_texto_pdf(formatar_brl(row['Novo Preço Unit. (R$)'])), border=1, fill=fill, align="R")
+                pdf.cell(col_widths[5], 6, limpar_texto_pdf(str(row['Fornecedor do Preço Novo'])[:28]), border=1, fill=fill, align="L")
+                pdf.cell(col_widths[6], 6, limpar_texto_pdf(formatar_brl(row['Último Preço Hist. (R$)'])), border=1, fill=fill, align="R")
+                pdf.cell(col_widths[7], 6, limpar_texto_pdf(str(row['Fornecedor do Último Preço'])[:28]), border=1, fill=fill, align="L")
                 
                 if var_val < 0:
                     pdf.set_text_color(0, 128, 0)
