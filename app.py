@@ -204,7 +204,7 @@ def extrair_tabela_excel_inteligente(arquivo_excel):
         header_row_idx = 0
         for idx, row in df_raw.iterrows():
             row_str = " ".join([str(x) for x in row.values if pd.notna(x)]).lower()
-            if 'código' in row_str or 'codigo' in row_str or 'descrição' in row_str or 'vlr. unitário' in row_str or 'item' in row_str:
+            if 'código' in row_str or 'codigo' in row_str or 'descrição' in row_str or 'vlr' in row_str or 'item' in row_str:
                 header_row_idx = idx
                 break
                 
@@ -238,8 +238,8 @@ cotacao = pd.DataFrame()
 if uploaded_cot is not None:
     # Barra de progresso durante o carregamento e processamento
     progress_bar = st.progress(0, text="Iniciando processamento do arquivo...")
-    time.sleep(0.2)
-    progress_bar.progress(30, text="Lendo dados da cotação...")
+    time.sleep(0.1)
+    progress_bar.progress(35, text="Lendo dados da cotação...")
     
     nome = uploaded_cot.name.lower()
     try:
@@ -252,14 +252,14 @@ if uploaded_cot is not None:
         elif nome.endswith(('.mhtml', '.html', '.mht')):
             cotacao = extrair_tabela_mhtml(uploaded_cot)
             
-        progress_bar.progress(70, text="Cruzando dados com o histórico...")
-        time.sleep(0.2)
+        progress_bar.progress(75, text="Cruzando dados com o histórico...")
+        time.sleep(0.1)
     except Exception as e:
         st.error(f"Erro ao ler arquivo: {e}")
         cotacao = pd.DataFrame()
         
     progress_bar.progress(100, text="Processamento concluído!")
-    time.sleep(0.3)
+    time.sleep(0.2)
     progress_bar.empty()
 
 # Se nenhum arquivo foi carregado ou a tabela estiver vazia, exibe instrução inicial
@@ -271,8 +271,12 @@ else:
     def achar_coluna(df, termos):
         for col in df.columns:
             c_low = str(col).lower()
-            if any(t in c_low for t in termos):
-                return col
+            # Remove acentos para garantir compatibilidade exata na busca
+            c_low_norm = "".join([c for c in unicodedata.normalize('NFKD', c_low) if not unicodedata.combining(c)])
+            for t in termos:
+                t_norm = "".join([c for c in unicodedata.normalize('NFKD', t) if not unicodedata.combining(c)])
+                if t_norm in c_low_norm:
+                    return col
         return None
 
     c_item = achar_coluna(cotacao, ['item'])
@@ -280,10 +284,8 @@ else:
     c_desc = achar_coluna(cotacao, ['descrição', 'descricao'])
     c_qtd = achar_coluna(cotacao, ['qtd', 'quantidade'])
     
-    # Mapeamento rigoroso priorizando exatamente "Valor Unit. (R$)" ou variações equivalentes
-    c_vlr = achar_coluna(cotacao, ['valor unit.', 'vlr. unitário', 'vlr unitario', 'unitario', 'preço unitário', 'preco unitario'])
-    if not c_vlr:
-        c_vlr = achar_coluna(cotacao, ['vlr', 'preço', 'preco'])
+    # Mapeamento rigoroso capturando "Valor Unitário", "Vlr. Unitário" ou equivalentes
+    c_vlr = achar_coluna(cotacao, ['valor unit', 'vlr. unit', 'unitario', 'preço unit', 'preco unit', 'vlr', 'preço', 'preco'])
 
     c_forn = achar_coluna(cotacao, ['fornecedor', 'empresa'])
     c_status = achar_coluna(cotacao, ['status'])
