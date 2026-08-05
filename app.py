@@ -49,7 +49,7 @@ uploaded_cot = st.sidebar.file_uploader(
     type=["csv", "xlsx", "docx"]
 )
 
-# Funções de Conversão e Formatação
+# Funções de Conversão e Formatação Padrão Brasileiro Rigoroso (X.XXX,XX)
 def limpar_valor(valor):
     if pd.isna(valor):
         return 0.0
@@ -73,10 +73,26 @@ def limpar_valor(valor):
         return 0.0
 
 def formatar_brl(valor):
-    return f"R$ {valor:,.2f}".replace(',', 'X').replace('.', ',').replace('X', '.')
+    try:
+        val_float = float(valor)
+    except:
+        val_float = 0.0
+    # Formata com separador de milhar por ponto e decimal por vírgula
+    return f"R$ {val_float:,.2f}".replace(',', 'X').replace('.', ',').replace('X', '.')
+
+def formatar_qtd(valor):
+    try:
+        val_float = float(valor)
+    except:
+        val_float = 0.0
+    return f"{val_float:,.2f}".replace(',', 'X').replace('.', ',').replace('X', '.')
 
 def formatar_pct(valor):
-    return f"{valor:+,.2f}%".replace(',', 'X').replace('.', ',').replace('X', '.')
+    try:
+        val_float = float(valor)
+    except:
+        val_float = 0.0
+    return f"{val_float:+,.2f}%".replace(',', 'X').replace('.', ',').replace('X', '.')
 
 def extrair_numeros(codigo):
     if pd.isna(codigo):
@@ -84,22 +100,21 @@ def extrair_numeros(codigo):
     apenas_nums = ''.join(filter(str.isdigit, str(codigo)))
     return str(int(apenas_nums)) if apenas_nums.isdigit() else str(codigo).strip()
 
-# 1. Leitura Inteligente do Histórico do GitHub por Posição de Coluna (Baseado na sua imagem)
+# 1. Leitura Inteligente do Histórico do GitHub
 @st.cache_data
 def carregar_historico_github():
     caminho = "historico_compras.csv"
     if os.path.exists(caminho):
         try:
-            # Lê o CSV sem assumir cabeçalho fixo para capturar todas as linhas brutas
             df = pd.read_csv(caminho, header=None, dtype=str)
             return df, "Conectado com sucesso ao GitHub (historico_compras.csv)"
         except Exception as e:
             return pd.DataFrame(), f"Erro ao ler historico_compras.csv: {e}"
     else:
         df = pd.DataFrame({
-            6: ['0000005177', '0000007519'], # Coluna G (índice 6)
-            10: ['203.5525', '83.3645'],     # Coluna K (índice 10)
-            4: ['CAA Com. e Ind. Amaz. de Alumínio Ltda.', 'CAA Comércio Amazonense de Alumínio Ltda.'] # Coluna E (índice 4)
+            6: ['0000005177', '0000007519'],
+            10: ['203.5525', '83.3645'],
+            4: ['CAA Com. e Ind. Amaz. de Alumínio Ltda.', 'CAA Comércio Amazonense de Alumínio Ltda.']
         })
         return df, "historico_compras.csv não encontrado. Usando dados padrão."
 
@@ -221,11 +236,9 @@ for idx, row in cotacao.iterrows():
                 preco_novo = v_limpo
                 break
 
-    # Busca no Histórico mapeando pelas posições padrão da sua planilha (Coluna G = Código, Coluna K = Preço, Coluna E = Fornecedor)
     match = pd.DataFrame()
     if not historico.empty:
         for h_idx, h_row in historico.iterrows():
-            # Varre todas as colunas da linha do CSV para achar o código correspondente
             for col_num in h_row.index:
                 val_celula = str(h_row[col_num])
                 if extrair_numeros(val_celula) == codigo_busca and codigo_busca != '':
@@ -235,14 +248,12 @@ for idx, row in cotacao.iterrows():
                 break
     
     if not match.empty:
-        # Pega o preço da Coluna K (índice 10) ou da coluna que tiver formato numérico com ponto/vírgula
         ultimo_preco = 0.0
         for col_num in match.index:
             v_teste = limpar_valor(match[col_num])
-            if v_teste > 1.0 and v_teste != qtd: # Evita pegar quantidades baixas como preço
+            if v_teste > 1.0 and v_teste != qtd:
                 ultimo_preco = v_teste
                 
-        # Pega o fornecedor da Coluna E (índice 4) ou texto longo
         forn_hist = "Histórico Anterior"
         for col_num in match.index:
             t_celula = str(match[col_num])
@@ -256,7 +267,6 @@ for idx, row in cotacao.iterrows():
         ultimo_preco = preco_novo
         forn_hist = "Sem Histórico"
         
-    # Variação (Δ%) e Tendência
     variacao = ((preco_novo - ultimo_preco) / ultimo_preco) * 100 if ultimo_preco > 0 else 0.0
     
     if variacao < 0:
@@ -297,9 +307,9 @@ colunas_exatas = [
 
 df_final = df_final[colunas_exatas]
 
-# Formatação visual padrão brasileiro (R$ X.XXX,XX)
+# Aplicação rigorosa da formatação visual padrão brasileiro em todas as colunas numéricas
 df_display = df_final.copy()
-df_display['Qtd'] = df_display['Qtd'].apply(lambda x: f"{x:,.2f}".replace(',', 'X').replace('.', ',').replace('X', '.'))
+df_display['Qtd'] = df_display['Qtd'].apply(formatar_qtd)
 df_display['Último Preço Hist. (R$)'] = df_display['Último Preço Hist. (R$)'].apply(formatar_brl)
 df_display['Novo Preço Unit. (R$)'] = df_display['Novo Preço Unit. (R$)'].apply(formatar_brl)
 df_display['Variação (Δ%)'] = df_display['Variação (Δ%)'].apply(formatar_pct)
