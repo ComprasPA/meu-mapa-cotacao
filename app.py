@@ -7,6 +7,7 @@ from fpdf import FPDF
 import unicodedata
 import email
 from bs4 import BeautifulSoup
+import datetime
 
 # Configuração da Página
 st.set_page_config(
@@ -126,14 +127,16 @@ def limpar_texto_pdf(texto):
     texto_sem_acento = "".join([c for c in nfkd_form if not unicodedata.combining(c)])
     return texto_sem_acento.encode('latin-1', 'replace').decode('latin-1')
 
-# 1. Leitura do Histórico do GitHub
+# 1. Leitura do Histórico do GitHub com exibição da data de atualização
 @st.cache_data
 def carregar_historico_github():
     caminho = "historico_compras.csv"
     if os.path.exists(caminho):
         try:
             df = pd.read_csv(caminho, header=None, dtype=str)
-            return df, "Conectado com sucesso ao GitHub (historico_compras.csv)"
+            mod_time = os.path.getmtime(caminho)
+            data_atualizacao = datetime.datetime.fromtimestamp(mod_time).strftime('%d/%m/%Y às %H:%M')
+            return df, f"Atualizado em: {data_atualizacao}"
         except Exception as e:
             return pd.DataFrame(), f"Erro ao ler historico_compras.csv: {e}"
     else:
