@@ -17,7 +17,7 @@ st.set_page_config(
     layout="wide"
 )
 
-# Estilização visual corporativa estilo Dados Bancários
+# Estilização visual corporativa estilo Dados Bancários e setas coloridas
 st.markdown("""
     <style>
     .main { background-color: #ffffff; }
@@ -51,7 +51,6 @@ st.markdown("""
     .dataframe tr:nth-child(odd) {
         background-color: #ffffff !important;
     }
-    /* Ajuste de alinhamento esquerdo para colunas textuais */
     .dataframe td:nth-child(1), .dataframe td:nth-child(2), .dataframe td:nth-child(3), .dataframe td:nth-child(6), .dataframe td:nth-child(8), .dataframe td:nth-child(10) {
         text-align: left;
     }
@@ -106,12 +105,22 @@ def formatar_qtd(valor):
         val_float = 0.0
     return f"{val_float:,.2f}".replace(',', 'X').replace('.', ',').replace('X', '.')
 
-def formatar_pct(valor):
+def formatar_pct_com_seta(valor):
     try:
         val_float = float(valor)
     except:
         val_float = 0.0
-    return f"{val_float:+,.2f}%".replace(',', 'X').replace('.', ',').replace('X', '.')
+    
+    val_fmt = f"{val_float:+,.2f}%".replace(',', 'X').replace('.', ',').replace('X', '.')
+    
+    if val_float > 0:
+        # Seta vermelha para cima (Alta de preço / Desfavorável)
+        return f"<span style='color: #c00000; font-weight: bold;'>↑ {val_fmt}</span>"
+    elif val_float < 0:
+        # Seta verde para baixo (Queda de preço / Favorável)
+        return f"<span style='color: #2ca02c; font-weight: bold;'>↓ {val_fmt}</span>"
+    else:
+        return f"<span style='color: #555555;'>{val_fmt}</span>"
 
 def padronizar_codigo_10_digitos(codigo):
     """Padroniza rigorosamente o código do produto com 10 dígitos, completando com zeros à esquerda"""
@@ -376,7 +385,6 @@ else:
     if df_final.empty:
         st.warning("⚠️ Nenhum item válido encontrado. Verifique o arquivo carregado.")
     else:
-        # Ordem invertida: Novo preço e fornecedor novo vêm na frente
         colunas_exatas = [
             'Item', 'Código', 'Descrição Resumida', 'Qtd', 
             'Novo Preço Unit. (R$)', 'Fornecedor do Preço Novo',
@@ -390,7 +398,9 @@ else:
         df_display['Qtd'] = df_display['Qtd'].apply(formatar_qtd)
         df_display['Novo Preço Unit. (R$)'] = df_display['Novo Preço Unit. (R$)'].apply(formatar_brl)
         df_display['Último Preço Hist. (R$)'] = df_display['Último Preço Hist. (R$)'].apply(formatar_brl)
-        df_display['Variação (Δ%)'] = df_display['Variação (Δ%)'].apply(formatar_pct)
+        
+        # Aplica setas coloridas na coluna Variação (Δ%) para exibição interativa
+        df_display['Variação (Δ%)'] = df_final['Variação (Δ%)'].apply(formatar_pct_com_seta)
 
         # Exibição do painel interativo formatado com classe CSS 'dataframe' (Estilo Dados Bancários)
         st.subheader("📋 Mapa de Cotação Consolidado & Comparativo Histórico")
@@ -431,7 +441,6 @@ else:
             pdf = PDFProfissional()
             pdf.add_page()
             
-            # Larguras somando exatamente 284 mm (dentro da largura útil de 284.2 mm)
             col_widths = [10, 22, 60, 10, 20, 50, 20, 50, 21, 21]
             headers = [
                 "Item", "Codigo", "Descricao", "Qtd", 
