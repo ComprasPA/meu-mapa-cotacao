@@ -5,6 +5,7 @@ import os
 import docx
 from fpdf import FPDF
 import unicodedata
+from google import genai
 
 # Configuração da Página
 st.set_page_config(
@@ -12,6 +13,9 @@ st.set_page_config(
     page_icon="📊",
     layout="wide"
 )
+
+# Chave do Gemini pré-configurada
+GEMINI_API_KEY = "AQ.Ab8RN6I0XGpR9RtaXtPUpM1gvgYbVRMTtwkRDXYvMTKxfDEgtQ"
 
 # Estilização visual corporativa
 st.markdown("""
@@ -44,7 +48,7 @@ st.markdown("""
 st.title("📊 Gestão Estratégica de Suprimentos | Mapa de Cotação & Histórico")
 st.markdown("Plataforma analítica para homologação de preços, variação de custos e tomada de decisão comercial.")
 
-# Gerenciamento de Estado para Limpar Histórico/Sessão
+# Gerenciamento de Estado
 if 'limpar_cache' not in st.session_state:
     st.session_state.limpar_cache = False
 
@@ -115,12 +119,10 @@ def extrair_numeros(codigo):
     return str(int(apenas_nums)) if apenas_nums.isdigit() else str(codigo).strip()
 
 def limpar_texto_pdf(texto):
-    """Remove acentos, caracteres especiais e converte de forma segura para o PDF"""
     if not isinstance(texto, str):
         texto = str(texto)
     nfkd_form = unicodedata.normalize('NFKD', texto)
     texto_sem_acento = "".join([c for c in nfkd_form if not unicodedata.combining(c)])
-    # Força a codificação para latin-1 substituindo qualquer caractere estranho remanescente
     return texto_sem_acento.encode('latin-1', 'replace').decode('latin-1')
 
 # 1. Leitura do Histórico do GitHub
@@ -386,6 +388,38 @@ else:
             mime="application/pdf"
         )
 
+    # Seção de Análise Avançada com Gemini AI
+    st.markdown("---")
+    st.subheader("🤖 Análise Estratégica de Suprimentos com Gemini AI")
+    
+    if st.button("✨ Executar Análise Inteligente de Custos"):
+        with st.spinner("Analisando cotações, variações e histórico via Inteligência Artificial..."):
+            try:
+                client = genai.Client(api_key=GEMINI_API_KEY)
+                
+                resumo_dados = df_final[['Código', 'Descrição Resumida', 'Qtd', 'Último Preço Hist. (R$)', 'Novo Preço Unit. (R$)', 'Variação (Δ%)', 'Fornecedor do Preço Novo']].to_string()
+                
+                prompt = (
+                    "Atue como um Especialista Sênior em Supply Chain, Gestão Estratégica de Compras e Negociação Corporativa. "
+                    "Analise os seguintes dados do mapa de cotação comparado com o histórico:\n\n"
+                    f"{resumo_dados}\n\n"
+                    "Forneça um relatório executivo estruturado com:\n"
+                    "1. **Oportunidades de Economia:** Destaques dos itens com reduções favoráveis.\n"
+                    "2. **Alertas de Risco:** Itens com aumentos expressivos que exigem renegociação.\n"
+                    "3. **Recomendações Práticas de Homologação:** Diretrizes claras para tomada de decisão comercial considerando volume e mercado."
+                )
+                
+                response = client.models.generate_content(
+                    model='gemini-2.5-flash',
+                    contents=prompt,
+                )
+                
+                st.success("Análise gerada com sucesso pelo Gemini!")
+                st.markdown(response.text)
+                
+            except Exception as e:
+                st.error(f"Erro ao comunicar com a API do Gemini: {e}")
+
     # Bloco de Observações Técnicas (ZFM e Logística)
     st.markdown("---")
     st.subheader("🔍 Observações Logísticas e Fiscais (ZFM)")
@@ -395,9 +429,9 @@ else:
     * **Picos Fora da Curva:** Análise crítica obrigatória em variações superiores a +5%, verificando oscilações de matéria-prima e custos logísticos antes da emissão da O.C.
     """)
 
-    # Seção Obrigatória: Insight do Especialista
+    # Seção Obrigatória: Insight Rápido do Especialista
     st.markdown("---")
-    st.subheader("💡 Insight do Especialista")
+    st.subheader("💡 Insight Rápido do Especialista")
 
     itens_em_queda = df_final[df_final['Variação (Δ%)'] < 0]
     if not itens_em_queda.empty:
