@@ -17,12 +17,30 @@ st.set_page_config(
     layout="wide"
 )
 
-# Estilização visual corporativa estilo Dados Bancários e prevenção de quebra na coluna de variação
+# Estilização visual corporativa estilo Dados Bancários e layout limpo sem barra lateral
 st.markdown("""
     <style>
     .main { background-color: #ffffff; }
-    h1 { color: #1f2c34; font-family: 'Helvetica Neue', sans-serif; margin-bottom: 25px; }
+    h1 { color: #1f2c34; font-family: 'Helvetica Neue', sans-serif; margin-bottom: 5px; }
     
+    /* Cabeçalho alinhado com status à direita */
+    .top-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 20px;
+    }
+    .status-badge {
+        background-color: #e8f0fe;
+        color: #1967d2;
+        padding: 6px 12px;
+        border-radius: 6px;
+        font-size: 13px;
+        font-weight: 600;
+        font-family: 'Helvetica Neue', sans-serif;
+        border: 1px solid #d2e3fc;
+    }
+
     /* Estilização da Tabela no Estilo Dados Bancários */
     .dataframe {
         width: 100% !important;
@@ -46,7 +64,6 @@ st.markdown("""
         font-size: 13px !important;
         text-align: right;
     }
-    /* Impede estritamente a quebra de texto na coluna Variação (Δ%) */
     .dataframe td:nth-child(9), .dataframe th:nth-child(9) {
         white-space: nowrap !important;
         text-align: center !important;
@@ -63,16 +80,45 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-st.title("📊 Gestão Estratégica de Compras | Mapa de Cotação")
+# 1. Leitura do Histórico do GitHub
+@st.cache_data
+def carregar_historico_github():
+    caminho = "historico_compras.csv"
+    if os.path.exists(caminho):
+        try:
+            df = pd.read_csv(caminho, header=None, dtype=str)
+            mod_time = os.path.getmtime(caminho)
+            data_atualizacao = datetime.datetime.fromtimestamp(mod_time).strftime('%d/%m/%Y')
+            return df, f"Base de dados atualizada em: {data_atualizacao}"
+        except Exception as e:
+            return pd.DataFrame(), f"Erro ao ler historico_compras.csv: {e}"
+    else:
+        df = pd.DataFrame({
+            4: ['CAA COMERCIO AMAZONENSE DE ALUMINIO LTDA.'], 
+            6: ['0000005177'],                              
+            10: ['375.58']                                   
+        })
+        return df, "Base de dados atualizada em: Indisponível"
 
-# Barra lateral para upload de arquivos
-st.sidebar.header("📁 Fontes de Dados")
-uploaded_cot = st.sidebar.file_uploader(
+historico, status_historico = carregar_historico_github()
+
+# Topo do App: Título e Status no canto superior direito
+col_title, col_status = st.columns([7, 3])
+with col_title:
+    st.title("📊 Gestão Estratégica de Compras | Mapa de Cotação")
+with col_status:
+    st.markdown(f"<div style='text-align: right; margin-top: 15px;'><span class='status-badge'>ℹ️ {status_historico}</span></div>", unsafe_allow_html=True)
+
+st.markdown("---")
+
+# Campo Carregar Mapa de Cotação na parte superior do app
+st.subheader("📁 Fontes de Dados")
+uploaded_cot = st.file_uploader(
     "Carregar Mapa de Cotação (.csv, .xlsx, .docx ou .mhtml)", 
     type=["csv", "xlsx", "docx", "mhtml", "html"]
 )
 
-st.sidebar.markdown("---")
+st.markdown("---")
 
 # Funções de Conversão e Formatação Padrão Brasileiro Rigoroso (X.XXX,XX)
 def limpar_valor(valor):
@@ -134,7 +180,6 @@ def formatar_pct_com_seta(valor):
     
     val_fmt = f"{val_float:+,.2f}%".replace(',', 'X').replace('.', ',').replace('X', '.')
     
-    # Seta e percentual na mesma linha sem quebra (white-space: nowrap)
     if val_float > 0:
         return f"<span style='color: #c00000; font-size: 15px; font-weight: 900; white-space: nowrap;'>↑ {val_fmt}</span>"
     elif val_float < 0:
@@ -143,7 +188,6 @@ def formatar_pct_com_seta(valor):
         return f"<span style='color: #555555; font-size: 13px; font-weight: bold; white-space: nowrap;'>{val_fmt}</span>"
 
 def padronizar_codigo_10_digitos(codigo):
-    """Padroniza rigorosamente o código do produto com 10 dígitos, completando com zeros à esquerda"""
     if pd.isna(codigo):
         return ""
     apenas_nums = ''.join(filter(str.isdigit, str(codigo)))
@@ -158,30 +202,7 @@ def limpar_texto_pdf(texto):
     texto_sem_acento = "".join([c for c in nfkd_form if not unicodedata.combining(c)])
     return texto_sem_acento.encode('latin-1', 'replace').decode('latin-1')
 
-# 1. Leitura do Histórico do GitHub
-@st.cache_data
-def carregar_historico_github():
-    caminho = "historico_compras.csv"
-    if os.path.exists(caminho):
-        try:
-            df = pd.read_csv(caminho, header=None, dtype=str)
-            mod_time = os.path.getmtime(caminho)
-            data_atualizacao = datetime.datetime.fromtimestamp(mod_time).strftime('%d/%m/%Y')
-            return df, f"base de dados atualizada em: {data_atualizacao}"
-        except Exception as e:
-            return pd.DataFrame(), f"Erro ao ler historico_compras.csv: {e}"
-    else:
-        df = pd.DataFrame({
-            4: ['CAA COMERCIO AMAZONENSE DE ALUMINIO LTDA.'], 
-            6: ['0000005177'],                              
-            10: ['375.58']                                   
-        })
-        return df, "base de dados atualizada em: Indisponível"
-
-historico, status_historico = carregar_historico_github()
-st.sidebar.info(f"ℹ️ **Status:** {status_historico}")
-
-# 2. Leitura de arquivos MHTML / HTML
+# Leitura de arquivos MHTML / HTML
 def extrair_tabela_mhtml(arquivo_bytes):
     try:
         conteudo_str = arquivo_bytes.getvalue().decode('utf-8', errors='ignore')
@@ -265,7 +286,6 @@ def extrair_tabela_docx_limpa(arquivo_docx):
         st.error(f"Erro ao processar o documento Word: {e}")
     return pd.DataFrame()
 
-# O painel permanece limpo se nenhum arquivo for enviado
 cotacao = pd.DataFrame()
 if uploaded_cot is not None:
     with st.spinner("Loading... Processando mapa de cotação e cruzando com o histórico..."):
@@ -283,9 +303,8 @@ if uploaded_cot is not None:
             st.error(f"Erro ao ler arquivo: {e}")
             cotacao = pd.DataFrame()
 
-# Se nenhum arquivo foi carregado ou a tabela estiver vazia, exibe instrução inicial
 if cotacao.empty:
-    st.info("👈 Por favor, faça o upload do seu Mapa de Cotação (.csv, .xlsx, .docx ou .mhtml) na barra lateral para iniciar a análise.")
+    st.info("👆 Por favor, faça o upload do seu Mapa de Cotação (.csv, .xlsx, .docx ou .mhtml) acima para iniciar a análise.")
 else:
     cotacao.columns = [str(c).strip() for c in cotacao.columns]
 
@@ -303,10 +322,7 @@ else:
     c_cod = achar_coluna(cotacao, ['código', 'codigo', 'produto', 'sku'])
     c_desc = achar_coluna(cotacao, ['descrição', 'descricao'])
     c_qtd = achar_coluna(cotacao, ['qtd', 'quantidade'])
-    
-    # Mapeamento rigoroso capturando "Valor Unitário", "Vlr. Unitário" ou equivalentes
     c_vlr = achar_coluna(cotacao, ['valor unit', 'vlr. unit', 'unitario', 'preço unit', 'preco unit', 'vlr', 'preço', 'preco'])
-
     c_forn = achar_coluna(cotacao, ['fornecedor', 'empresa'])
     c_status = achar_coluna(cotacao, ['status'])
 
@@ -466,7 +482,6 @@ else:
             pdf = PDFProfissional()
             pdf.add_page()
             
-            # Alargado o espaço da coluna de variação no PDF (22 mm) para acomodar perfeitamente o texto sem quebra
             col_widths = [10, 22, 60, 10, 20, 50, 20, 50, 22, 20]
             headers = [
                 "Item", "Codigo", "Descricao", "Qtd", 
@@ -511,9 +526,9 @@ else:
                 
                 if var_val != "":
                     if var_val < 0:
-                        pdf.set_text_color(44, 160, 44) # Verde
+                        pdf.set_text_color(44, 160, 44)
                     elif var_val > 0:
-                        pdf.set_text_color(192, 0, 0) # Vermelho
+                        pdf.set_text_color(192, 0, 0)
                     else:
                         pdf.set_text_color(0, 0, 0)
                 
