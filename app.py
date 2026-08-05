@@ -134,37 +134,44 @@ def carregar_historico_github():
 historico, status_historico = carregar_historico_github()
 st.sidebar.info(f"ℹ️ **Status:** {status_historico}")
 
-# 2. Leitura inteligente de arquivos DOCX do TOTVS
+# 2. Leitura inteligente e blindada de arquivos DOCX do TOTVS
 def extrair_tabela_docx_inteligente(arquivo_docx):
-    doc = docx.Document(arquivo_docx)
-    todas_linhas = []
-    for tabela in doc.tables:
-        for linha in tabela.rows:
-            texto_linha = [celula.text.strip().replace('\n', ' ') for celula in linha.cells]
-            if any(texto_linha):
-                todas_linhas.append(texto_linha)
-                
-    if len(todas_linhas) > 1:
-        cabecalho_idx = 0
-        for idx, linha in enumerate(todas_linhas[:5]):
-            texto_unido = " ".join(linha).lower()
-            if 'item' in texto_unido or 'codigo' in texto_unido or 'descrição' in texto_unido or 'unitário' in texto_unido:
-                cabecalho_idx = idx
-                break
-                
-        headers = todas_linhas[cabecalho_idx]
-        dados = todas_linhas[cabecalho_idx+1:]
-        
-        df_temp = pd.DataFrame(dados)
-        if len(headers) < len(df_temp.columns):
-            headers = [f"Col_{i}" for i in range(len(df_temp.columns))]
-        elif len(headers) > len(df_temp.columns):
-            headers = headers[:len(df_temp.columns)]
+    try:
+        doc = docx.Document(arquivo_docx)
+        todas_linhas = []
+        for tabela in doc.tables:
+            for linha in tabela.rows:
+                texto_linha = [celula.text.strip().replace('\n', ' ') for celula in linha.cells]
+                if any(texto_linha):
+                    todas_linhas.append(texto_linha)
+                    
+        if len(todas_linhas) > 0:
+            cabecalho_idx = 0
+            for idx, linha in enumerate(todas_linhas[:5]):
+                texto_unido = " ".join(linha).lower()
+                if 'item' in texto_unido or 'codigo' in texto_unido or 'descrição' in texto_unido or 'unitário' in texto_unido:
+                    cabecalho_idx = idx
+                    break
+                    
+            headers = todas_linhas[cabecalho_idx]
+            dados = todas_linhas[cabecalho_idx+1:]
             
-        return pd.DataFrame(dados, columns=headers)
+            if not dados:
+                return pd.DataFrame()
+                
+            df_temp = pd.DataFrame(dados)
+            if len(headers) < len(df_temp.columns):
+                headers = [f"Col_{i}" for i in range(len(df_temp.columns))]
+            elif len(headers) > len(df_temp.columns):
+                headers = headers[:len(df_temp.columns)]
+                
+            return pd.DataFrame(dados, columns=headers)
+    except Exception as e:
+        st.error(f"Erro ao processar o documento Word: {e}")
     return pd.DataFrame()
 
 # O painel permanece limpo se nenhum arquivo for enviado
+cotacao = pd.DataFrame()
 if uploaded_cot is not None:
     nome = uploaded_cot.name.lower()
     try:
@@ -177,10 +184,8 @@ if uploaded_cot is not None:
     except Exception as e:
         st.error(f"Erro ao ler arquivo: {e}")
         cotacao = pd.DataFrame()
-else:
-    cotacao = pd.DataFrame()
 
-# Se nenhum arquivo foi carregado, exibe apenas a instrução inicial limpa
+# Se nenhum arquivo foi carregado ou a tabela estiver vazia, exibe instrução inicial
 if cotacao.empty:
     st.info("👈 Por favor, faça o upload do seu Mapa de Cotação Atual (.csv, .xlsx ou .docx) na barra lateral para iniciar a análise.")
 else:
@@ -190,7 +195,7 @@ else:
         col_item, col_cod, col_desc, col_qtd, col_vlr, col_forn = None, None, None, None, None, None
         
         for col in df.columns:
-            c_low = col.lower()
+            c_low = str(col).lower()
             if 'item' in c_low and not col_item: col_item = col
             elif any(k in c_low for k in ['cód', 'cod', 'sku']) and not col_cod: col_cod = col
             elif any(k in c_low for k in ['descri', 'produto', 'material']) and not col_desc: col_desc = col
@@ -200,8 +205,11 @@ else:
 
         if not col_cod or not col_vlr:
             for col in df.columns:
-                amostra = " ".join(df[col].astype(str).values).lower()
-                if not col_cod and any(digitos.isdigit() and len(digitos) >= 4 for digitos in df[col].astype(str)):
+                valores_serie = df[col].dropna()
+                if valores_serie.empty:
+                    continue
+                amostra = " ".join(valores_serie.astype(str).values).lower()
+                if not col_cod and any(str(digitos).isdigit() and len(str(digitos)) >= 4 for digitos in valores_serie):
                     col_cod = col
                 if not col_vlr and 'r$' in amostra:
                     col_vlr = col
