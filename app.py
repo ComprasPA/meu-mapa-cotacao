@@ -3,6 +3,8 @@ import pandas as pd
 import numpy as np
 import os
 import docx
+from fpdf import FPDF
+import tempfile
 
 # Configuração da Página
 st.set_page_config(
@@ -42,12 +44,25 @@ st.markdown("""
 st.title("📊 Gestão Estratégica de Suprimentos | Mapa de Cotação & Histórico")
 st.markdown("Plataforma analítica para homologação de preços, variação de custos e tomada de decisão comercial.")
 
-# Barra lateral para upload
+# Gerenciamento de Estado para Limpar Histórico/Sessão
+if 'limpar_cache' not in st.session_state:
+    st.session_state.limpar_cache = False
+
+# Barra lateral para upload e ações de controle
 st.sidebar.header("📁 Fontes de Dados")
 uploaded_cot = st.sidebar.file_uploader(
     "Carregar Mapa de Cotação Atual (.csv, .xlsx ou .docx)", 
     type=["csv", "xlsx", "docx"]
 )
+
+st.sidebar.markdown("---")
+st.sidebar.header("⚙️ Ações e Ferramentas")
+
+if st.sidebar.button("🧹 Limpar Histórico / Cache"):
+    st.cache_data.clear()
+    st.session_state.clear()
+    st.sidebar.success("Cache e histórico limpos com sucesso!")
+    st.rerun()
 
 # Funções de Conversão e Formatação Padrão Brasileiro Rigoroso (X.XXX,XX)
 def limpar_valor(valor):
@@ -99,7 +114,7 @@ def extrair_numeros(codigo):
     apenas_nums = ''.join(filter(str.isdigit, str(codigo)))
     return str(int(apenas_nums)) if apenas_nums.isdigit() else str(codigo).strip()
 
-# 1. Leitura do Histórico do GitHub (Sem cabeçalho fixo para respeitar as posições exatas das colunas do seu sistema)
+# 1. Leitura do Histórico do GitHub
 @st.cache_data
 def carregar_historico_github():
     caminho = "historico_compras.csv"
@@ -111,9 +126,9 @@ def carregar_historico_github():
             return pd.DataFrame(), f"Erro ao ler historico_compras.csv: {e}"
     else:
         df = pd.DataFrame({
-            4: ['CAA COMERCIO AMAZONENSE DE ALUMINIO LTDA.'], # Coluna E = Fornecedor
-            6: ['0000005177'],                              # Coluna G = Código do Produto
-            10: ['375.58']                                   # Coluna K = Preço Unitário
+            4: ['CAA COMERCIO AMAZONENSE DE ALUMINIO LTDA.'], 
+            6: ['0000005177'],                              
+            10: ['375.58']                                   
         })
         return df, "historico_compras.csv não encontrado. Usando dados padrão."
 
@@ -224,7 +239,7 @@ for idx, row in cotacao.iterrows():
     codigo_busca = extrair_numeros(codigo_original)
     
     desc = str(row[c_desc] if c_desc and pd.notna(row[c_desc]) else 'Descrição não informada')
-    qtd = limpar_valor(row[c_qtd] if c_qtd and pd.notna(row[c_qtd]) == True else 1)
+    qtd = limpar_valor(row[c_qtd] if c_qtd and pd.notna(row[c_qtd]) else 1)
     preco_novo = limpar_valor(row[c_vlr] if c_vlr and pd.notna(row[c_vlr]) else 0)
     forn_novo = str(row[c_forn] if c_forn and pd.notna(row[c_forn]) else 'Fornecedor não informado')
     
@@ -235,17 +250,12 @@ for idx, row in cotacao.iterrows():
                 preco_novo = v_limpo
                 break
 
-    # Busca estrita na base de histórico do GitHub mapeando exatamente as posições das colunas:
-    # Coluna G (índice 6) = Código do Produto
-    # Coluna K (índice 10) = Preço Unitário
-    # Coluna E (índice 4) = Nome do Fornecedor
     ultimo_preco = preco_novo
     forn_hist = "Sem Histórico"
     
     if not historico.empty:
         match_linhas = []
         for h_idx, h_row in historico.iterrows():
-            # Verifica na coluna G (índice 6) ou em qualquer outra célula da linha se o código confere
             for col_idx in h_row.index:
                 val_celula = str(h_row[col_idx])
                 if extrair_numeros(val_celula) == codigo_busca and codigo_busca != '':
@@ -253,16 +263,12 @@ for idx, row in cotacao.iterrows():
                     break
                     
         if match_linhas:
-            # Pega a última ocorrência cadastrada na base para este código
             ultima_ocorrencia = match_linhas[-1]
-            
-            # Tenta extrair o preço da Coluna K (índice 10) se existir, senão busca o valor numérico válido
             try:
                 preco_hist_col = limpar_valor(ultima_ocorrencia.get(10, 0))
                 if preco_hist_col > 0:
                     ultimo_preco = preco_hist_col
                 else:
-                    # Varre procurando o valor unitário válido na linha
                     for val in ultima_ocorrencia.values:
                         v = limpar_valor(val)
                         if v > 1.0 and v != qtd:
@@ -271,7 +277,6 @@ for idx, row in cotacao.iterrows():
             except:
                 pass
                 
-            # Tenta extrair o fornecedor da Coluna E (índice 4) se existir
             try:
                 forn_col = str(ultima_ocorrencia.get(4, ""))
                 if len(forn_col) > 3 and forn_col.lower() not in ['nan', 'a vista', '25 dias']:
@@ -309,23 +314,15 @@ for idx, row in cotacao.iterrows():
 
 df_final = pd.DataFrame(resultados)
 
-# Ordem exata solicitada
 colunas_exatas = [
-    'Item', 
-    'Código', 
-    'Descrição Resumida', 
-    'Qtd', 
-    'Último Preço Hist. (R$)', 
-    'Fornecedor do Último Preço', 
-    'Novo Preço Unit. (R$)', 
-    'Fornecedor do Preço Novo', 
-    'Variação (Δ%)', 
-    'Tendência'
+    'Item', 'Código', 'Descrição Resumida', 'Qtd', 
+    'Último Preço Hist. (R$)', 'Fornecedor do Último Preço', 
+    'Novo Preço Unit. (R$)', 'Fornecedor do Preço Novo', 
+    'Variação (Δ%)', 'Tendência'
 ]
 
 df_final = df_final[colunas_exatas]
 
-# Formatação visual padrão brasileiro (R$ X.XXX,XX)
 df_display = df_final.copy()
 df_display['Qtd'] = df_display['Qtd'].apply(formatar_qtd)
 df_display['Último Preço Hist. (R$)'] = df_display['Último Preço Hist. (R$)'].apply(formatar_brl)
@@ -336,6 +333,54 @@ df_display['Variação (Δ%)'] = df_display['Variação (Δ%)'].apply(formatar_p
 st.subheader("📋 Mapa de Cotação Consolidado & Comparativo Histórico")
 
 st.markdown(df_display.to_html(escape=False, index=False), unsafe_allow_html=True)
+
+# Função para Gerar PDF do Relatório
+def gerar_pdf(df):
+    pdf = FPDF(orientation='L', unit='mm', format='A4')
+    pdf.add_page()
+    pdf.set_font("helvetica", "B", 14)
+    pdf.cell(0, 10, "Mapa de Cotacao & Comparativo Histórico - Suprimentos", 0, 1, "C")
+    pdf.ln(5)
+    
+    pdf.set_font("helvetica", "B", 8)
+    col_widths = [12, 22, 65, 15, 25, 45, 25, 45, 18, 20]
+    headers = [
+        "Item", "Codigo", "Descricao", "Qtd", 
+        "Ult. Preco", "Forn. Ant.", "Novo Preco", 
+        "Forn. Novo", "Var (%)", "Tendencia"
+    ]
+    
+    for i, h in enumerate(headers):
+        pdf.cell(col_widths[i], 7, h, 1, 0, "C")
+    pdf.ln()
+    
+    pdf.set_font("helvetica", "", 7)
+    for _, row in df.iterrows():
+        pdf.cell(col_widths[0], 6, str(row['Item']), 1, 0, "C")
+        pdf.cell(col_widths[1], 6, str(row['Código']), 1, 0, "C")
+        pdf.cell(col_widths[2], 6, str(row['Descrição Resumida'])[:35], 1, 0, "L")
+        pdf.cell(col_widths[3], 6, str(row['Qtd']), 1, 0, "R")
+        pdf.cell(col_widths[4], 6, formatar_brl(row['Último Preço Hist. (R$)']), 1, 0, "R")
+        pdf.cell(col_widths[5], 6, str(row['Fornecedor do Último Preço'])[:25], 1, 0, "L")
+        pdf.cell(col_widths[6], 6, formatar_brl(row['Novo Preço Unit. (R$)']), 1, 0, "R")
+        pdf.cell(col_widths[7], 6, str(row['Fornecedor do Preço Novo'])[:25], 1, 0, "L")
+        pdf.cell(col_widths[8], 6, formatar_pct(row['Variação (Δ%)']), 1, 0, "R")
+        pdf.cell(col_widths[9], 6, str(row['Tendência']), 1, 0, "C")
+        pdf.ln()
+        
+    return pdf.output()
+
+# Botão de Download em PDF na interface principal
+st.markdown("---")
+col_bt1, col_bt2 = st.columns([2, 8])
+with col_bt1:
+    pdf_bytes = gerar_pdf(df_final)
+    st.download_button(
+        label="📥 Baixar Mapa em PDF",
+        data=pdf_bytes,
+        file_name="mapa_de_cotacao_suprimentos.pdf",
+        mime="application/pdf"
+    )
 
 # Bloco de Observações Técnicas (ZFM e Logística)
 st.markdown("---")
