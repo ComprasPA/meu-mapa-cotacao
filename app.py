@@ -22,38 +22,58 @@ pd_st.markdown("""
 pd_st.title("📊 Gestão Estratégica de Suprimentos | Mapa de Cotação & Histórico")
 pd_st.markdown("Plataforma analítica para homologação de preços, variação de custos e tomada de decisão comercial.")
 
-# Sidebar para upload de dados ou leitura do GitHub
-pd_st.sidebar.header("📁 Fontes de Dados")
+# Sidebar para upload de dados (Planilhas e Documentos estruturados)
+pd_st.sidebar.header("📁 Fontes de Dados (Upload)")
 uploaded_file = pd_st.sidebar.file_uploader("Carregar Mapa de Cotação Atual (.csv ou .xlsx)", type=["csv", "xlsx"])
-uploaded_history = pd_st.sidebar.file_uploader("Carregar Histórico de Compras Opcional (.csv ou .xlsx)", type=["csv", "xlsx"])
+uploaded_history = pd_st.sidebar.file_uploader("Carregar Histórico de Compras (.csv ou .xlsx)", type=["csv", "xlsx"])
 
-# Função auxiliar para padronizar nomes de colunas (evita erros de digitação ou acentuação)
+# Função auxiliar para ler arquivos suportados
+def ler_arquivo(arquivo_upload, caminho_padrao):
+    try:
+        if arquivo_upload is not None:
+            nome = arquivo_upload.name.lower()
+            if nome.endswith('.csv'):
+                return pd.read_csv(arquivo_upload)
+            elif nome.endswith(('.xlsx', '.xls')):
+                return pd.read_excel(arquivo_upload)
+        elif os.path.exists(caminho_padrao):
+            if caminho_padrao.endswith('.csv'):
+                return pd.read_csv(caminho_padrao)
+            elif caminho_padrao.endswith(('.xlsx', '.xls')):
+                return pd.read_excel(caminho_padrao)
+    except Exception as e:
+        pd_st.sidebar.error(f"Erro ao ler o arquivo: {e}")
+    return None
+
+# Função para padronizar colunas independentemente de como vierem no documento
 def padronizar_colunas(df):
+    if df is None or df.empty:
+        return pd.DataFrame()
     df.columns = df.columns.str.strip()
-    # Mapeamentos comuns para garantir compatibilidade
     renomear = {}
     for col in df.columns:
         col_lower = col.lower()
-        if col_lower in ['codigo', 'código', 'cod', 'sku']:
+        if col_lower in ['codigo', 'código', 'cod', 'sku', 'item code']:
             renomear[col] = 'Código'
-        elif col_lower in ['item', 'produto', 'material']:
+        elif col_lower in ['item', 'produto', 'material', 'descrição', 'descricao']:
             renomear[col] = 'Item'
-        elif col_lower in ['descricao resumida', 'descrição resumida', 'descricao', 'desc']:
+        elif col_lower in ['descricao resumida', 'descrição resumida', 'descrição', 'detalhes']:
             renomear[col] = 'Descrição Resumida'
-        elif col_lower in ['qtd', 'quantidade', 'quant']:
+        elif col_lower in ['qtd', 'quantidade', 'quant', 'qtde']:
             renomear[col] = 'Qtd'
-        elif col_lower in ['preco unit. (r$)', 'preço unit. (r$)', 'preco unitario', 'preço unitário', 'preco', 'preço']:
+        elif col_lower in ['preco unit. (r$)', 'preço unit. (r$)', 'preco unitario', 'preço unitário', 'preco', 'preço', 'valor unitario', 'valor unitário']:
             renomear[col] = 'Preço Unit. (R$)'
-        elif col_lower in ['novo preco unit. (r$)', 'novo preço unit. (r$)', 'novo preco', 'novo preço']:
+        elif col_lower in ['novo preco unit. (r$)', 'novo preço unit. (r$)', 'novo preco', 'novo preço', 'preco cotado']:
             renomear[col] = 'Novo Preço Unit. (R$)'
-        elif col_lower in ['fornecedor', 'forn']:
+        elif col_lower in ['fornecedor', 'forn', 'empresa']:
             renomear[col] = 'Fornecedor'
-        elif col_lower in ['fornecedor do preço novo', 'fornecedor preco novo']:
+        elif col_lower in ['fornecedor do preço novo', 'fornecedor preco novo', 'novo fornecedor']:
             renomear[col] = 'Fornecedor do Preço Novo'
-        elif col_lower in ['data', 'dt']:
+        elif col_lower in ['data', 'dt', 'data da compra']:
             renomear[col] = 'Data'
     return df.rename(columns=renomear)
 
+# Mocks de segurança caso não haja arquivos enviados
 def gerar_hist_mock():
     return pd.DataFrame({
         'Código': ['SKU001', 'SKU001', 'SKU002', 'SKU003', 'SKU003'],
@@ -75,58 +95,40 @@ def gerar_cot_mock():
         'Fornecedor do Preço Novo': ['EPI Manaus Comércio', 'Papelaria & Cia', 'Metaltec Suprimentos']
     })
 
-# Carregamento de dados com tratamento de exceção robusto
-def carregar_dados():
-    caminho_git_hist = "historico_compras.csv"
-    
-    if uploaded_history is not None:
-        try:
-            hist_data = pd.read_csv(uploaded_history) if uploaded_history.name.endswith('.csv') else pd.read_excel(uploaded_history)
-        except Exception:
-            hist_data = gerar_hist_mock()
-    elif os.path.exists(caminho_git_hist):
-        try:
-            hist_data = pd.read_csv(caminho_git_hist)
-        except Exception:
-            hist_data = gerar_hist_mock()
-    else:
-        hist_data = gerar_hist_mock()
-        
-    if uploaded_file is not None:
-        try:
-            cot_data = pd.read_csv(uploaded_file) if uploaded_file.name.endswith('.csv') else pd.read_excel(uploaded_file)
-        except Exception:
-            cot_data = gerar_cot_mock()
-    else:
-        cot_data = gerar_cot_mock()
-        
-    return padronizar_colunas(hist_data), padronizar_colunas(cot_data)
+# Carregamento efetivo
+hist_raw = ler_arquivo(uploaded_history, "historico_compras.csv")
+if hist_raw is None or hist_raw.empty:
+    hist_data = gerar_hist_mock()
+else:
+    hist_data = padronizar_colunas(hist_raw)
 
-hist_data, cot_data = carregar_dados()
+cot_raw = ler_arquivo(uploaded_file, "mapa_cotacao.csv")
+if cot_raw is None or cot_raw.empty:
+    cot_data = gerar_cot_mock()
+else:
+    cot_data = padronizar_colunas(cot_raw)
 
 # Processamento do Comparativo Histórico na ordem exata solicitada
 def processar_comparativo(historico, cotacao):
     resultado = []
     
-    # Garantir tratamento de data se existir
     if 'Data' in historico.columns:
         historico['Data'] = pd.to_datetime(historico['Data'], errors='coerce')
         historico = historico.sort_values(by='Data', ascending=False)
     
     for _, row in cotacao.iterrows():
-        # Valores seguros caso alguma coluna opcional falte na cotação nova
-        codigo = row.get('Código', 'N/D')
-        item = row.get('Item', 'Item Genérico')
-        desc = row.get('Descrição Resumida', '')
-        qtd_novo = row.get('Qtd', 0)
-        preco_novo = row.get('Novo Preço Unit. (R$)', row.get('Preço Unit. (R$)', 0.0))
-        forn_novo = row.get('Fornecedor do Preço Novo', row.get('Fornecedor', 'Não informado'))
+        codigo = str(row.get('Código', 'N/D'))
+        item = str(row.get('Item', 'Item Genérico'))
+        desc = str(row.get('Descrição Resumida', ''))
+        qtd_novo = float(row.get('Qtd', 0))
+        preco_novo = float(row.get('Novo Preço Unit. (R$)', row.get('Preço Unit. (R$)', 0.0)))
+        forn_novo = str(row.get('Fornecedor do Preço Novo', row.get('Fornecedor', 'Não informado')))
         
-        hist_item = historico[historico['Código'] == codigo] if 'Código' in historico.columns else pd.DataFrame()
+        hist_item = historico[historico['Código'].astype(str) == codigo] if 'Código' in historico.columns else pd.DataFrame()
         
         if not hist_item.empty and 'Preço Unit. (R$)' in hist_item.columns:
-            ultimo_preco_hist = hist_item.iloc[0]['Preço Unit. (R$)']
-            forn_hist = hist_item.iloc[0].get('Fornecedor', 'Histórico Anterior')
+            ultimo_preco_hist = float(hist_item.iloc[0]['Preço Unit. (R$)'])
+            forn_hist = str(hist_item.iloc[0].get('Fornecedor', 'Histórico Anterior'))
         else:
             ultimo_preco_hist = preco_novo
             forn_hist = "Sem Histórico"
@@ -150,11 +152,11 @@ def processar_comparativo(historico, cotacao):
             'Código': codigo,
             'Descrição Resumida': desc,
             'Qtd': qtd_novo,
-            'Último Preço Hist. (R$)': round(float(ultimo_preco_hist), 2),
+            'Último Preço Hist. (R$)': round(ultimo_preco_hist, 2),
             'Fornecedor do Último Preço': forn_hist,
-            'Novo Preço Unit. (R$)': round(float(preco_novo), 2),
+            'Novo Preço Unit. (R$)': round(preco_novo, 2),
             'Fornecedor do Preço Novo': forn_novo,
-            'Variação (Δ%)': round(float(variacao), 2),
+            'Variação (Δ%)': round(variacao, 2),
             'Tendência': tendencia
         })
         
@@ -176,6 +178,7 @@ df_resultado = processar_comparativo(hist_data, cot_data)
 pd_st.subheader("📋 Mapa de Cotação Consolidado & Comparativo Histórico")
 
 pd_st.dataframe(df_resultado.style.format({
+    'Qtd': '{:,.0f}',
     'Último Preço Hist. (R$)': 'R$ {:.2f}',
     'Novo Preço Unit. (R$)': 'R$ {:.2f}',
     'Variação (Δ%)': '{:+.2f}%'
