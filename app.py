@@ -17,7 +17,7 @@ st.set_page_config(
     layout="wide"
 )
 
-# Estilização visual corporativa estilo Dados Bancários e layout limpo sem barra lateral
+# Estilização visual corporativa estilo Dados Bancários e ajuste preciso da altura do expander
 st.markdown("""
     <style>
     .main { background-color: #ffffff; }
@@ -33,6 +33,18 @@ st.markdown("""
         font-weight: 600;
         font-family: 'Helvetica Neue', sans-serif;
         border: 1px solid #d2e3fc;
+    }
+
+    /* Ajuste de altura e padding idêntico ao modelo da imagem para o Expander */
+    .streamlit-expanderHeader {
+        padding-top: 6px !important;
+        padding-bottom: 6px !important;
+        min-height: 38px !important;
+        font-size: 14px !important;
+    }
+    .streamlit-expanderContent {
+        padding-top: 10px !important;
+        padding-bottom: 10px !important;
     }
 
     /* Estilização da Tabela no Estilo Dados Bancários */
@@ -96,23 +108,12 @@ def carregar_historico_github():
 
 historico, status_historico = carregar_historico_github()
 
-# Caixa Oculta (Abre / Fecha) posicionada acima do título do app
-with st.expander("⚙️ Abrir / Fechar Configurações (Upload, Data Base e Tema)", expanded=False):
-    col_exp1, col_exp2 = st.columns([2, 1])
-    
-    with col_exp1:
-        st.markdown("### 📁 Upload de Arquivo")
-        uploaded_cot = st.file_uploader(
-            "Carregar Mapa de Cotação (.csv, .xlsx, .docx ou .mhtml)", 
-            type=["csv", "xlsx", "docx", "mhtml", "html"]
-        )
-        
-    with col_exp2:
-        st.markdown("### 🎨 Tema do Sistema")
-        _ = st.selectbox(
-            "Selecione o Estilo Visual",
-            ["Dados Bancários (Padrão)", "Corporativo Azul Limpo", "Modo Compacto"]
-        )
+# Caixa Oculta (Abre / Fecha) com altura ajustada idêntica à referência
+with st.expander("⚙️ Abrir / Fechar Configurações (Upload e Data Base)", expanded=False):
+    uploaded_cot = st.file_uploader(
+        "Carregar Mapa de Cotação (.csv, .xlsx, .docx ou .mhtml)", 
+        type=["csv", "xlsx", "docx", "mhtml", "html"]
+    )
 
 st.markdown("---")
 
