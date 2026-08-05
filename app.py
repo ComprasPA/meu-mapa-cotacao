@@ -147,7 +147,7 @@ def carregar_historico_github():
 historico, status_historico = carregar_historico_github()
 st.sidebar.info(f"ℹ️ **Status:** {status_historico}")
 
-# 2. Leitura avançada e profunda de arquivos MHTML / HTML do TOTVS
+# 2. Leitura de arquivos MHTML / HTML
 def extrair_tabela_mhtml(arquivo_bytes):
     try:
         conteudo_str = arquivo_bytes.getvalue().decode('utf-8', errors='ignore')
@@ -171,7 +171,6 @@ def extrair_tabela_mhtml(arquivo_bytes):
         else:
             html_contents.append(conteudo_str)
 
-        # Procura tabelas em todas as partes HTML encontradas no MHTML
         dfs = []
         for html_content in html_contents:
             soup = BeautifulSoup(html_content, 'html.parser')
@@ -186,7 +185,6 @@ def extrair_tabela_mhtml(arquivo_bytes):
                     continue
                     
         if dfs:
-            # Retorna a tabela mais completa (com maior número de linhas/colunas)
             df_principal = max(dfs, key=lambda x: len(x) * len(x.columns))
             df_principal.columns = [str(c).strip() for c in df_principal.columns]
             return df_principal
@@ -204,7 +202,7 @@ def extrair_tabela_excel_inteligente(arquivo_excel):
         header_row_idx = 0
         for idx, row in df_raw.iterrows():
             row_str = " ".join([str(x) for x in row.values if pd.notna(x)]).lower()
-            if 'código' in row_str or 'codigo' in row_str or 'descrição' in row_str or 'vlr' in row_str or 'item' in row_str:
+            if 'código' in row_str or 'codigo' in row_str or 'descrição' in row_str or 'vlr. unitário' in row_str or 'item' in row_str:
                 header_row_idx = idx
                 break
                 
@@ -267,7 +265,12 @@ else:
     c_cod = achar_coluna(cotacao, ['código', 'codigo', 'produto', 'sku'])
     c_desc = achar_coluna(cotacao, ['descrição', 'descricao'])
     c_qtd = achar_coluna(cotacao, ['qtd', 'quantidade'])
-    c_vlr = achar_coluna(cotacao, ['vlr. unitário', 'vlr unitario', 'unitario', 'preço', 'preco', 'vlr'])
+    
+    # Mapeamento rigoroso priorizando exatamente "Valor Unit. (R$)" ou variações equivalentes
+    c_vlr = achar_coluna(cotacao, ['valor unit.', 'vlr. unitário', 'vlr unitario', 'unitario', 'preço unitário', 'preco unitario'])
+    if not c_vlr:
+        c_vlr = achar_coluna(cotacao, ['vlr', 'preço', 'preco'])
+
     c_forn = achar_coluna(cotacao, ['fornecedor', 'empresa'])
     c_status = achar_coluna(cotacao, ['status'])
 
@@ -364,7 +367,7 @@ else:
     df_final = pd.DataFrame(resultados)
 
     if df_final.empty:
-        st.warning("⚠️ Nenhum item válido encontrado no arquivo MHTML. Certifique-se de salvar a página completa do TOTVS.")
+        st.warning("⚠️ Nenhum item válido encontrado. Verifique o arquivo carregado.")
     else:
         colunas_exatas = [
             'Item', 'Código', 'Descrição Resumida', 'Qtd', 
