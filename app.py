@@ -14,14 +14,14 @@ st.set_page_config(
 st.title("📊 Gestão Estratégica de Suprimentos | Mapa de Cotação & Histórico")
 st.markdown("Plataforma analítica para homologação de preços, variação de custos e tomada de decisão comercial.")
 
-# Barra lateral para upload (agora aceitando CSV, XLSX e DOCX)
+# Barra lateral para upload
 st.sidebar.header("📁 Fontes de Dados")
 uploaded_cot = st.sidebar.file_uploader(
     "Carregar Mapa de Cotação Atual (.csv, .xlsx ou .docx)", 
     type=["csv", "xlsx", "docx"]
 )
 
-# 1. Leitura Automática do Histórico direto do GitHub (historico_compras.csv)
+# 1. Leitura Automática do Histórico direto do GitHub
 @st.cache_data
 def carregar_historico_github():
     caminho = "historico_compras.csv"
@@ -29,31 +29,30 @@ def carregar_historico_github():
         try:
             return pd.read_csv(caminho)
         except Exception as e:
-            st.sidebar.error(f"Erro ao ler historico_compras.csv do GitHub: {e}")
+            st.sidebar.error(f"Erro ao ler historico_compras.csv: {e}")
     
-    # Fallback caso o arquivo não seja encontrado no GitHub
+    # Fallback compatível com os códigos de exemplo
     return pd.DataFrame({
-        'Código': ['SKU001', 'SKU002', 'SKU003'],
-        'Data': ['2026-02-10', '2026-01-20', '2026-03-12'],
-        'Item': ['Luva de Raspa', 'Bobina Térmica 80x40', 'Terminal Tubular'],
-        'Descrição Resumida': ['Luva raspa couro cano curto', 'Bobina papel térmico cx c/ 30', 'Terminal tubular 2.5mm pct 100un'],
-        'Qtd': [150, 20, 60],
-        'Preço Unit. (R$)': [13.20, 85.00, 20.50],
-        'Fornecedor': ['Industrial Sul Ltda', 'Papelaria & Cia', 'Global Elétrica SP']
+        'Código': ['0000005177', '0000007519'],
+        'Data': ['2026-02-10', '2026-01-20'],
+        'Item': ['0001', '0002'],
+        'Descrição Resumida': ['PAINEL DIVIS CEGO MAD AGLOM BG 1200X2110MM', 'FECHADURA CILINDRO INOX POLIDO PORTA DIVIS CHAV/BOTAO 90MM'],
+        'Qtd': [15.0, 2.0],
+        'Preço Unit. (R$)': [375.58, 83.36],
+        'Fornecedor': ['CAA Com. e Ind. Amaz. de Alumínio Ltda.', 'CAA Comércio Amazonense de Alumínio Ltda.']
     })
 
 historico = carregar_historico_github()
 
-# 2. Leitura da Cotação (Suporte a CSV, XLSX e extração de tabelas de DOCX)
+# 2. Leitura de Cotação (Suporte a DOCX, CSV e XLSX)
 def extrair_tabela_docx(arquivo_docx):
     doc = docx.Document(arquivo_docx)
     dados = []
     for tabela in doc.tables:
-        for i, linha in enumerate(tabela.rows):
+        for linha in tabela.rows:
             texto_linha = [celula.text.strip() for celula in linha.cells]
             dados.append(texto_linha)
     if len(dados) > 1:
-        # Assume a primeira linha como cabeçalho
         df = pd.DataFrame(dados[1:], columns=dados[0])
         return df
     return pd.DataFrame()
@@ -61,12 +60,18 @@ def extrair_tabela_docx(arquivo_docx):
 @st.cache_data
 def carregar_cotacao_padrao():
     return pd.DataFrame({
-        'Item': ['Luva de Raspa', 'Bobina Térmica 80x40', 'Terminal Tubular'],
-        'Código': ['SKU001', 'SKU002', 'SKU003'],
-        'Descrição Resumida': ['Luva raspa couro cano curto', 'Bobina papel térmico cx c/ 30', 'Terminal tubular 2.5mm pct 100un'],
-        'Qtd': [120, 25, 40],
-        'Novo Preço Unit. (R$)': [14.00, 82.00, 23.50],
-        'Fornecedor do Preço Novo': ['EPI Manaus Comércio', 'Papelaria & Cia', 'Metaltec Suprimentos']
+        'Item': ['0001', '0002'],
+        'Código': ['0000005177', '0000007519'],
+        'Descrição Resumida': [
+            'PAINEL DIVIS CEGO MAD AGLOM BG 1200X2110MM', 
+            'FECHADURA CILINDRO INOX POLIDO PORTA DIVIS CHAV/BOTAO 90MM'
+        ],
+        'Qtd': [15.00, 2.00],
+        'Novo Preço Unit. (R$)': [183.62, 70.07],
+        'Fornecedor do Preço Novo': [
+            'CENTRO DO ALUMINIO INDUSTRIA E COMERCIO DE FERRAGENS, FERRAM', 
+            'CENTRO DO ALUMINIO INDUSTRIA E COMERCIO DE FERRAGENS, FERRAM'
+        ]
     })
 
 cotacao = pd.DataFrame()
@@ -81,42 +86,42 @@ if uploaded_cot is not None:
         elif nome_arquivo.endswith('.docx'):
             cotacao = extrair_tabela_docx(uploaded_cot)
             if cotacao.empty:
-                st.sidebar.warning("Nenhuma tabela encontrada dentro do arquivo DOCX. Usando dados padrão.")
                 cotacao = carregar_cotacao_padrao()
     except Exception as e:
-        st.sidebar.error(f"Erro ao processar o arquivo enviado: {e}")
+        st.sidebar.error(f"Erro ao processar arquivo: {e}")
         cotacao = carregar_cotacao_padrao()
 else:
     cotacao = carregar_cotacao_padrao()
 
-# Limpeza e normalização de colunas
+# Padronização de nomes de colunas
 historico.columns = [str(c).strip() for c in historico.columns]
 cotacao.columns = [str(c).strip() for c in cotacao.columns]
 
-# Motor de processamento do comparativo
+# Motor de processamento idêntico ao layout de referência
 resultados = []
 
-for _, row_cot in cotacao.iterrows():
-    # Mapeamento flexível de colunas
-    codigo = str(row_cot.get('Código', row_cot.get('Codigo', row_cot.get('SKU', row_cot.get('Cód.', 'N/D')))))
-    item = str(row_cot.get('Item', row_cot.get('Produto', row_cot.get('Material', 'Genérico'))))
+for idx, row_cot in cotacao.iterrows():
+    num_item = str(row_cot.get('Item', f"{idx+1:04d}"))
+    if len(num_item) < 4:
+        num_item = num_item.zfill(4)
+        
+    codigo = str(row_cot.get('Código', row_cot.get('Codigo', row_cot.get('SKU', 'N/D')))).replace('.', '').replace(' ', '')
     desc = str(row_cot.get('Descrição Resumida', row_cot.get('Descricao Resumida', row_cot.get('Descrição', ''))))
     
     try:
-        qtd = float(str(row_cot.get('Qtd', row_cot.get('Quantidade', row_cot.get('Qtde', 0)))).replace('R$', '').replace(',', '.'))
+        qtd = float(str(row_cot.get('Qtd', row_cot.get('Quantidade', 0))).replace('R$', '').replace(',', '.'))
     except:
         qtd = 0.0
 
     try:
-        preco_novo = float(str(row_cot.get('Novo Preço Unit. (R$)', row_cot.get('Novo Preco Unit. (R$)', row_cot.get('Preço Unit. (R$)', row_cot.get('Preço Unitário', row_cot.get('Preço', 0))))))
-                           .replace('R$', '').replace('.', '').replace(',', '.'))
+        preco_novo = float(str(row_cot.get('Novo Preço Unit. (R$)', row_cot.get('Novo Preco Unit. (R$)', row_cot.get('Preço Unit. (R$)', 0)))).replace('R$', '').replace('.', '').replace(',', '.'))
     except:
         preco_novo = 0.0
 
-    forn_novo = str(row_cot.get('Fornecedor do Preço Novo', row_cot.get('Fornecedor', row_cot.get('Empresa', 'Não informado'))))
+    forn_novo = str(row_cot.get('Fornecedor do Preço Novo', row_cot.get('Fornecedor', 'Não informado')))
     
-    # Busca no Histórico do GitHub
-    match_hist = historico[historico.astype(str).apply(lambda x: x.str.contains(codigo, case=False)).any(axis=1)] if not historico.empty else pd.DataFrame()
+    # Busca correspondente no histórico
+    match_hist = historico[historico['Código'].astype(str).str.replace('.', '').str.replace(' ', '') == codigo] if not historico.empty else pd.DataFrame()
     
     if not match_hist.empty:
         col_preco_hist = [c for c in match_hist.columns if 'preço' in c.lower() or 'preco' in c.lower() or 'unit' in c.lower()]
@@ -138,21 +143,21 @@ for _, row_cot in cotacao.iterrows():
         ultimo_preco = preco_novo
         forn_hist = "Sem Histórico"
         
-    # Cálculos de Variação (Δ%) e Tendência
+    # Cálculos de Variação (Δ%) e Padrão de Tendência Exato da Imagem
     if ultimo_preco > 0:
         variacao = ((preco_novo - ultimo_preco) / ultimo_preco) * 100
     else:
         variacao = 0.0
         
-    if variacao > 0.5:
-        tendencia = "📈 Alta"
-    elif variacao < -0.5:
-        tendencia = "📉 Queda"
+    if variacao < 0:
+        tendencia = f"Queda (Favorável)"
+    elif variacao > 0:
+        tendencia = f"Alta (Desfavorável)"
     else:
-        tendencia = "➡️ Estabilidade"
+        tendencia = f"Estabilidade"
         
     resultados.append({
-        'Item': item,
+        'Item': num_item,
         'Código': codigo,
         'Descrição Resumida': desc,
         'Qtd': qtd,
@@ -160,23 +165,23 @@ for _, row_cot in cotacao.iterrows():
         'Fornecedor do Último Preço': forn_hist,
         'Novo Preço Unit. (R$)': round(preco_novo, 2),
         'Fornecedor do Preço Novo': forn_novo,
-        'Variação (Δ%)': round(variacao, 2),
+        'Variação (Δ%)': variacao,
         'Tendência': tendencia
     })
 
 df_final = pd.DataFrame(resultados)
 
-# Exibição da Tabela Consolidada na Ordem Exata Requerida
+# Exibição da Tabela Consolidada rigorosamente na ordem solicitada
 st.subheader("📋 Mapa de Cotação Consolidado & Comparativo Histórico")
 
 st.dataframe(df_final.style.format({
-    'Qtd': '{:,.0f}',
-    'Último Preço Hist. (R$)': 'R$ {:.2f}',
-    'Novo Preço Unit. (R$)': 'R$ {:.2f}',
-    'Variação (Δ%)': '{:+.2f}%'
+    'Qtd': '{:,.2f}',
+    'Último Preço Hist. (R$)': 'R$ {:,.2f}',
+    'Novo Preço Unit. (R$)': 'R$ {:,.2f}',
+    'Variação (Δ%)': '{:+,.2f}%'
 }), use_container_width=True)
 
-# Bloco de Observações Técnicas (Logística e ZFM)
+# Bloco de Observações Técnicas
 st.markdown("---")
 st.subheader("🔍 Observações Logísticas e Fiscais (ZFM)")
 st.markdown("""
@@ -189,18 +194,17 @@ st.markdown("""
 st.markdown("---")
 st.subheader("💡 Insight do Especialista")
 
-itens_em_alta = df_final[df_final['Variação (Δ%)'] > 0]
-if not itens_em_alta.empty:
+itens_em_queda = df_final[df_final['Variação (Δ%)'] < 0]
+if not itens_em_queda.empty:
     insight_texto = (
-        f"Detectada pressão inflacionária em **{len(itens_em_alta)} item(ns)** da cotação atual. "
-        "Recomenda-se a **renegociação imediata baseada no volume histórico de consumo** ou "
-        "o acionamento de praças alternativas na região de Manaus para otimização do custo total (preço + frete)."
+        f"Identificada oportunidade expressiva de economia em **{len(itens_em_queda)} item(ns)** com redução de custos favorável. "
+        "Recomenda-se a **homologação imediata com o novo fornecedor** para captura dos ganhos de margem, "
+        "certificando-se de que os prazos de entrega e condições logísticas para Manaus atendem ao cronograma operacional."
     )
 else:
     insight_texto = (
-        "Os preços encontram-se estáveis ou em tendência de deflação. "
-        "Recomenda-se a **antecipação de compras estratégicas** para garantir o abastecimento "
-        "e fixar condições comerciais favoráveis perante a sazonalidade."
+        "Cenário de alta nos preços detectado. Recomenda-se a **renegociação com base no histórico de volume** "
+        "ou busca por fornecedores alternativos na praça local para evitar impacto no orçamento."
     )
 
 st.success(insight_texto)
