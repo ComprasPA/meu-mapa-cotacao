@@ -1,34 +1,26 @@
-import streamlit as pd_st
+import streamlit as st
 import pandas as pd
 import numpy as np
 
 # Configuração da Página
-pd_st.set_page_config(
+st.set_page_config(
     page_title="Mapa de Cotação e Análise de Custos",
     page_icon="📊",
     layout="wide"
 )
 
-# Estilização CSS profissional
-pd_st.markdown("""
-    <style>
-    .main { background-color: #f8f9fa; }
-    h1 { color: #1f2c34; font-family: 'Helvetica Neue', sans-serif; }
-    .stAlert { font-size: 14px; }
-    </style>
-""", unsafe_allow_html=True)
+st.title("📊 Gestão Estratégica de Suprimentos | Mapa de Cotação & Histórico")
+st.markdown("Plataforma analítica para homologação de preços, variação de custos e tomada de decisão comercial.")
 
-pd_st.title("📊 Gestão Estratégica de Suprimentos | Mapa de Cotação & Histórico")
-pd_st.markdown("Plataforma analítica para homologação de preços, variação de custos e tomada de decisão comercial.")
+# Barra lateral para upload opcional
+st.sidebar.header("📁 Fontes de Dados")
+uploaded_cot = st.sidebar.file_uploader("Mapa de Cotação Atual (.csv ou .xlsx)", type=["csv", "xlsx"])
+uploaded_hist = st.sidebar.file_uploader("Histórico de Compras (.csv ou .xlsx)", type=["csv", "xlsx"])
 
-# Sidebar para upload interativo de dados
-pd_st.sidebar.header("📁 Painel de Dados")
-uploaded_file = pd_st.sidebar.file_uploader("Carregar Mapa de Cotação (.csv ou .xlsx)", type=["csv", "xlsx"])
-uploaded_history = pd_st.sidebar.file_uploader("Carregar Histórico de Compras (.csv ou .xlsx)", type=["csv", "xlsx"])
-
-# Bases de Dados Padrão (Garantia de funcionamento imediato)
+# Função segura para carregar arquivos ou usar dados padrão de demonstração
+@st.cache_data
 def carregar_dados_padrao():
-    hist_data = pd.DataFrame({
+    df_hist = pd.DataFrame({
         'Código': ['SKU001', 'SKU001', 'SKU002', 'SKU003', 'SKU003'],
         'Data': ['2025-10-15', '2026-02-10', '2026-01-20', '2025-11-05', '2026-03-12'],
         'Item': ['Luva de Raspa', 'Luva de Raspa', 'Bobina Térmica 80x40', 'Terminal Tubular', 'Terminal Tubular'],
@@ -38,7 +30,7 @@ def carregar_dados_padrao():
         'Fornecedor': ['EPI Manaus Comércio', 'Industrial Sul Ltda', 'Papelaria & Cia', 'Conexões Amazônia', 'Global Elétrica SP']
     })
     
-    cot_data = pd.DataFrame({
+    df_cot = pd.DataFrame({
         'Item': ['Luva de Raspa', 'Bobina Térmica 80x40', 'Terminal Tubular'],
         'Código': ['SKU001', 'SKU002', 'SKU003'],
         'Descrição Resumida': ['Luva raspa couro cano curto', 'Bobina papel térmico cx c/ 30', 'Terminal tubular 2.5mm pct 100un'],
@@ -46,116 +38,104 @@ def carregar_dados_padrao():
         'Novo Preço Unit. (R$)': [14.00, 82.00, 23.50],
         'Fornecedor do Preço Novo': ['EPI Manaus Comércio', 'Papelaria & Cia', 'Metaltec Suprimentos']
     })
-    return hist_data, cot_data
+    return df_hist, df_cot
 
-# Leitura dos arquivos enviados pelo usuário ou uso do padrão
+# Leitura com proteção contra erros
+hist_padrao, cot_padrao = carregar_dados_padrao()
+
 try:
-    if uploaded_history is not None:
-        hist_data = pd.read_csv(uploaded_history) if uploaded_history.name.endswith('.csv') else pd.read_excel(uploaded_history)
+    if uploaded_hist is not None:
+        historico = pd.read_csv(uploaded_hist) if uploaded_hist.name.endswith('.csv') else pd.read_excel(uploaded_hist)
     else:
-        # Tenta ler do GitHub se existir, senão usa o padrão
+        # Tenta ler do workspace local/GitHub, se falhar usa o padrão
         try:
-            hist_data = pd.read_csv("historico_compras.csv")
+            historico = pd.read_csv("historico_compras.csv")
         except:
-            hist_data, _ = carregar_dados_padrao()
-
-    if uploaded_file is not None:
-        cot_data = pd.read_csv(uploaded_file) if uploaded_file.name.endswith('.csv') else pd.read_excel(uploaded_file)
-    else:
-        _, cot_data = carregar_dados_padrao()
+            historico = hist_padrao
 except Exception as e:
-    pd_st.error(f"Erro ao carregar os arquivos: {e}")
-    hist_data, cot_data = carregar_dados_padrao()
+    st.sidebar.warning(f"Aviso no histórico: {e}. Usando dados padrão.")
+    historico = hist_padrao
 
-# Normalização de nomes de colunas para aceitar variações de maiúsculas/minúsculas
-def limpar_colunas(df):
-    df.columns = df.columns.str.strip().str.title()
-    return df
+try:
+    if uploaded_cot is not None:
+        cotacao = pd.read_csv(uploaded_cot) if uploaded_cot.name.endswith('.csv') else pd.read_excel(uploaded_cot)
+    else:
+        cotacao = cot_padrao
+except Exception as e:
+    st.sidebar.warning(f"Aviso na cotação: {e}. Usando dados padrão.")
+    cotacao = cot_padrao
 
-hist_data = limpar_colunas(hist_data)
-cot_data = limpar_colunas(cot_data)
+# Limpeza e normalização básica de colunas
+historico.columns = [str(c).strip() for c in historico.columns]
+cotacao.columns = [str(c).strip() for c in cotacao.columns]
 
-# Processamento do Comparativo Histórico
-def processar_comparativo(historico, cotacao):
-    resultado = []
+# Motor de processamento e comparativo histórico
+resultados = []
+
+for _, row_cot in cotacao.iterrows():
+    # Identificação flexível de colunas
+    codigo = str(row_cot.get('Código', row_cot.get('Codigo', row_cot.get('SKU', 'N/D'))))
+    item = str(row_cot.get('Item', row_cot.get('Produto', 'Genérico')))
+    desc = str(row_cot.get('Descrição Resumida', row_cot.get('Descricao Resumida', '')))
+    qtd = float(row_cot.get('Qtd', row_cot.get('Quantidade', 0)))
     
-    # Padronização interna de nomes comuns
-    for col in historico.columns:
-        if 'Cod' in col or 'Sku' in col: historico.rename(columns={col: 'Código'}, inplace=True)
-        if 'Preco' in col or 'Preço' in col: historico.rename(columns={col: 'Preço Unit. (R$)'}, inplace=True)
-        if 'Fornecedor' in col: historico.rename(columns={col: 'Fornecedor'}, inplace=True)
-
-    for col in cotacao.columns:
-        if 'Cod' in col or 'Sku' in col: cotacao.rename(columns={col: 'Código'}, inplace=True)
-        if 'Novo Preco' in col or 'Novo Preço' in col: cotacao.rename(columns={col: 'Novo Preço Unit. (R$)'}, inplace=True)
-        if 'Qtd' in col or 'Quantidade' in col: cotacao.rename(columns={col: 'Qtd'}, inplace=True)
-
-    for _, row in cotacao.iterrows():
-        codigo = str(row.get('Código', 'N/D'))
-        item = str(row.get('Item', 'Item Genérico'))
-        desc = str(row.get('Descrição Resumida', row.get('Descricao Resumida', '')))
-        qtd_novo = float(row.get('Qtd', 0))
-        preco_novo = float(row.get('Novo Preço Unit. (R$)', row.get('Preço Unit. (R$)', 0.0)))
-        forn_novo = str(row.get('Fornecedor Do Preço Novo', row.get('Fornecedor', 'Não informado')))
-        
-        # Filtra histórico do item correspondente
-        if 'Código' in historico.columns:
-            hist_item = historico[historico['Código'].astype(str) == codigo]
-        else:
-            hist_item = pd.DataFrame()
-        
-        if not hist_item.empty and 'Preço Unit. (R$)' in hist_item.columns:
-            ultimo_preco_hist = float(hist_item.iloc[0]['Preço Unit. (R$)'])
-            forn_hist = str(hist_item.iloc[0].get('Fornecedor', 'Histórico Anterior'))
-        else:
-            ultimo_preco_hist = preco_novo
-            forn_hist = "Sem Histórico"
-            
-        # Cálculo de Variação (Δ%)
-        if ultimo_preco_hist > 0:
-            variacao = ((preco_novo - ultimo_preco_hist) / ultimo_preco_hist) * 100
-        else:
-            variacao = 0.0
-            
-        # Determinar Tendência
-        if variacao > 1.0:
-            tendencia = "📈 Alta"
-        elif variacao < -1.0:
-            tendencia = "📉 Queda"
-        else:
-            tendencia = "➡️ Estabilidade"
-            
-        resultado.append({
-            'Item': item,
-            'Código': codigo,
-            'Descrição Resumida': desc,
-            'Qtd': qtd_novo,
-            'Último Preço Hist. (R$)': round(ultimo_preco_hist, 2),
-            'Fornecedor do Último Preço': forn_hist,
-            'Novo Preço Unit. (R$)': round(preco_novo, 2),
-            'Fornecedor do Preço Novo': forn_novo,
-            'Variação (Δ%)': round(variacao, 2),
-            'Tendência': tendencia
-        })
-        
-    df_res = pd.DataFrame(resultado)
+    # Preço novo
+    preco_novo = float(row_cot.get('Novo Preço Unit. (R$)', row_cot.get('Novo Preco Unit. (R$)', row_cot.get('Preço Unit. (R$)', 0.0))))
+    forn_novo = str(row_cot.get('Fornecedor do Preço Novo', row_cot.get('Fornecedor', 'Não informado')))
     
-    # Ordem rigorosa exigida pelas diretrizes do especialista
-    colunas_ordenadas = [
-        'Item', 'Código', 'Descrição Resumida', 'Qtd', 
-        'Último Preço Hist. (R$)', 'Fornecedor do Último Preço', 
-        'Novo Preço Unit. (R$)', 'Fornecedor do Preço Novo', 
-        'Variação (Δ%)', 'Tendência'
-    ]
+    # Busca histórico do SKU/Código correspondente
+    match_hist = historico[historico.astype(str).apply(lambda x: x.str.contains(codigo, case=False)).any(axis=1)] if not historico.empty else pd.DataFrame()
     
-    return df_res[colunas_ordenadas]
+    if not match_hist.empty:
+        # Pega o último registro disponível no histórico
+        col_preco_hist = [c for c in match_hist.columns if 'preço' in c.lower() or 'preco' in c.lower() or 'unit' in c.lower()]
+        col_forn_hist = [c for c in match_hist.columns if 'fornecedor' in c.lower()]
+        
+        if col_preco_hist:
+            ultimo_preco = float(match_hist.iloc[-1][col_preco_hist[0]])
+        else:
+            ultimo_preco = preco_novo
+            
+        if col_forn_hist:
+            forn_hist = str(match_hist.iloc[-1][col_forn_hist[0]])
+        else:
+            forn_hist = "Histórico Anterior"
+    else:
+        ultimo_preco = preco_novo
+        forn_hist = "Sem Histórico"
+        
+    # Cálculos de Variação e Tendência
+    if ultimo_preco > 0:
+        variacao = ((preco_novo - ultimo_preco) / ultimo_preco) * 100
+    else:
+        variacao = 0.0
+        
+    if variacao > 0.5:
+        tendencia = "📈 Alta"
+    elif variacao < -0.5:
+        tendencia = "📉 Queda"
+    else:
+        tendencia = "➡️ Estabilidade"
+        
+    resultados.append({
+        'Item': item,
+        'Código': codigo,
+        'Descrição Resumida': desc,
+        'Qtd': qtd,
+        'Último Preço Hist. (R$)': round(ultimo_preco, 2),
+        'Fornecedor do Último Preço': forn_hist,
+        'Novo Preço Unit. (R$)': round(preco_novo, 2),
+        'Fornecedor do Preço Novo': forn_novo,
+        'Variação (Δ%)': round(variacao, 2),
+        'Tendência': tendencia
+    })
 
-df_resultado = processar_comparativo(hist_data, cot_data)
+df_final = pd.DataFrame(resultados)
 
-# Exibição da Tabela Consolidada
-pd_st.subheader("📋 Mapa de Cotação Consolidado & Comparativo Histórico")
+# Exibição da Tabela Consolidada na Ordem Exata Solicitada
+st.subheader("📋 Mapa de Cotação Consolidado & Comparativo Histórico")
 
-pd_st.dataframe(df_resultado.style.format({
+st.dataframe(df_final.style.format({
     'Qtd': '{:,.0f}',
     'Último Preço Hist. (R$)': 'R$ {:.2f}',
     'Novo Preço Unit. (R$)': 'R$ {:.2f}',
@@ -163,19 +143,19 @@ pd_st.dataframe(df_resultado.style.format({
 }), use_container_width=True)
 
 # Bloco de Observações Técnicas (Logística e ZFM)
-pd_st.markdown("---")
-pd_st.subheader("🔍 Observações Logísticas e Fiscais (ZFM)")
-pd_st.markdown("""
+st.markdown("---")
+st.subheader("🔍 Observações Logísticas e Fiscais (ZFM)")
+st.markdown("""
 * **Impacto Logístico:** Avaliação do custo total de frete (modal aéreo/fluvial) para suprimentos oriundos de 'Fora do Estado' em comparação com fornecedores locais de Manaus.
 * **Incentivos Fiscais:** Validação da aplicação correta dos benefícios tributários da Zona Franca de Manaus (ZFM) para preservação de margem.
 * **Picos Fora da Curva:** Análise crítica obrigatória em variações superiores a +5%, verificando oscilações de matéria-prima e custos logísticos antes da emissão da O.C.
 """)
 
 # Seção Obrigatória: Insight do Especialista
-pd_st.markdown("---")
-pd_st.subheader("💡 Insight do Especialista")
+st.markdown("---")
+st.subheader("💡 Insight do Especialista")
 
-itens_em_alta = df_resultado[df_resultado['Variação (Δ%)'] > 0]
+itens_em_alta = df_final[df_final['Variação (Δ%)'] > 0]
 if not itens_em_alta.empty:
     insight_texto = (
         f"Detectada pressão inflacionária em **{len(itens_em_alta)} item(ns)** da cotação atual. "
@@ -189,4 +169,4 @@ else:
         "e fixar condições comerciais favoráveis perante a sazonalidade."
     )
 
-pd_st.success(insight_texto)
+st.success(insight_texto)
