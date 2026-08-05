@@ -8,7 +8,6 @@ import unicodedata
 import email
 from bs4 import BeautifulSoup
 import datetime
-import time
 
 # Configuração da Página
 st.set_page_config(
@@ -236,31 +235,21 @@ def extrair_tabela_docx_limpa(arquivo_docx):
 # O painel permanece limpo se nenhum arquivo for enviado
 cotacao = pd.DataFrame()
 if uploaded_cot is not None:
-    # Barra de progresso durante o carregamento e processamento
-    progress_bar = st.progress(0, text="Iniciando processamento do arquivo...")
-    time.sleep(0.1)
-    progress_bar.progress(35, text="Lendo dados da cotação...")
-    
-    nome = uploaded_cot.name.lower()
-    try:
-        if nome.endswith('.csv'):
-            cotacao = pd.read_csv(uploaded_cot, dtype=str)
-        elif nome.endswith(('.xlsx', '.xls')):
-            cotacao = extrair_tabela_excel_inteligente(uploaded_cot)
-        elif nome.endswith('.docx'):
-            cotacao = extrair_tabela_docx_limpa(uploaded_cot)
-        elif nome.endswith(('.mhtml', '.html', '.mht')):
-            cotacao = extrair_tabela_mhtml(uploaded_cot)
-            
-        progress_bar.progress(75, text="Cruzando dados com o histórico...")
-        time.sleep(0.1)
-    except Exception as e:
-        st.error(f"Erro ao ler arquivo: {e}")
-        cotacao = pd.DataFrame()
-        
-    progress_bar.progress(100, text="Processamento concluído!")
-    time.sleep(0.2)
-    progress_bar.empty()
+    # st.spinner exibe o indicador "Loading..." animado e só some quando o bloco completo de processamento e renderização termina
+    with st.spinner("Loading... Processando mapa de cotação e cruzando com o histórico..."):
+        nome = uploaded_cot.name.lower()
+        try:
+            if nome.endswith('.csv'):
+                cotacao = pd.read_csv(uploaded_cot, dtype=str)
+            elif nome.endswith(('.xlsx', '.xls')):
+                cotacao = extrair_tabela_excel_inteligente(uploaded_cot)
+            elif nome.endswith('.docx'):
+                cotacao = extrair_tabela_docx_limpa(uploaded_cot)
+            elif nome.endswith(('.mhtml', '.html', '.mht')):
+                cotacao = extrair_tabela_mhtml(uploaded_cot)
+        except Exception as e:
+            st.error(f"Erro ao ler arquivo: {e}")
+            cotacao = pd.DataFrame()
 
 # Se nenhum arquivo foi carregado ou a tabela estiver vazia, exibe instrução inicial
 if cotacao.empty:
