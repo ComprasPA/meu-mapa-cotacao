@@ -146,42 +146,43 @@ def carregar_historico_github():
 historico, status_historico = carregar_historico_github()
 st.sidebar.info(f"ℹ️ **Status:** {status_historico}")
 
-# 2. Leitura inteligente e limpa de arquivos DOCX do TOTVS
+# 2. Leitura inteligente e limpa de arquivos Excel (.xlsx) / CSV / Word (.docx)
+def extrair_tabela_excel_inteligente(arquivo_excel):
+    try:
+        xls = pd.ExcelFile(arquivo_excel)
+        sheet_name = xls.sheet_names[0]
+        df_raw = pd.read_excel(xls, sheet_name=sheet_name, header=None)
+        
+        # Procura a linha de cabeçalho que contém 'Item' ou 'Código'
+        header_row_idx = 0
+        for idx, row in df_raw.iterrows():
+            row_str = " ".join(row.astype(str)).lower()
+            if 'código' in row_str or 'codigo' in row_str or 'descrição' in row_str or 'vlr. unitário' in row_str:
+                header_row_idx = idx
+                break
+                
+        # Recria o dataframe com o cabeçalho correto
+        df = pd.read_excel(xls, sheet_name=sheet_name, header=header_row_idx)
+        df.columns = [str(c).strip() for c in df.columns]
+        return df
+    except Exception as e:
+        st.error(f"Erro ao processar o arquivo Excel: {e}")
+        return pd.DataFrame()
+
 def extrair_tabela_docx_limpa(arquivo_docx):
     try:
         doc = docx.Document(arquivo_docx)
         linhas_validas = []
-        
         for tabela in doc.tables:
             for linha in tabela.rows:
                 celulas = [cel.text.strip().replace('\n', ' ') for cel in linha.cells]
-                # Filtra apenas linhas que contêm conteúdo real e descarta cabeçalhos institucionais
-                texto_linha_unido = " ".join(celulas).lower()
-                if any(celulas) and not any(ignorar in texto_linha_unido for ignorar in ['parente andrade', 'departamento de suprimentos', 'mapa de cotacao']):
-                    # Verifica se a linha tem colunas suficientes para ser um item de produto
-                    if len(celulas) >= 3:
-                        linhas_validas.append(celulas)
-                        
-        if len(linhas_validas) > 0:
-            # Tenta achar a linha de cabeçalho real dos itens
-            inicio_dados = 0
-            for idx, l in enumerate(linhas_validas[:5]):
-                unido = " ".join(l).lower()
-                if 'código' in unido or 'codigo' in unido or 'descrição' in unido or 'unitário' in unido:
-                    inicio_dados = idx + 1
-                    break
-                    
-            dados = linhas_validas[inicio_dados:] if inicio_dados < len(linhas_validas) else linhas_validas
-            if not dados:
-                dados = linhas_validas
-                
-            max_cols = max(len(l) for l in dados)
+                if any(celulas):
+                    linhas_validas.append(celulas)
+        if linhas_validas:
+            max_cols = max(len(l) for l in linhas_validas)
             headers = [f"Col_{i}" for i in range(max_cols)]
-            
-            # Normaliza o tamanho das linhas
-            dados_norm = [l + [''] * (max_cols - len(l)) for l in dados]
+            dados_norm = [l + [''] * (max_cols - len(l)) for l in linhas_validas]
             return pd.DataFrame(dados_norm, columns=headers)
-            
     except Exception as e:
         st.error(f"Erro ao processar o documento Word: {e}")
     return pd.DataFrame()
@@ -194,7 +195,7 @@ if uploaded_cot is not None:
         if nome.endswith('.csv'):
             cotacao = pd.read_csv(uploaded_cot)
         elif nome.endswith(('.xlsx', '.xls')):
-            cotacao = pd.read_excel(uploaded_cot)
+            cotacao = extrair_tabela_excel_inteligente(uploaded_cot)
         elif nome.endswith('.docx'):
             cotacao = extrair_tabela_docx_limpa(uploaded_cot)
     except Exception as e:
@@ -207,57 +208,51 @@ if cotacao.empty:
 else:
     cotacao.columns = [str(c).strip() for c in cotacao.columns]
 
+    # Identifica colunas relevantes no Excel do TOTVS
+    def achar_coluna(df, termos):
+        for col in df.columns:
+            c_low = str(col).lower()
+            if any(t in c_low for t in termos):
+                return col
+        return None
+
+    c_item = achar_coluna(cotacao, ['item'])
+    c_cod = achar_coluna(cotacao, ['código', 'codigo', 'produto', 'sku'])
+    c_desc = achar_coluna(cotacao, ['descrição', 'descricao'])
+    c_qtd = achar_coluna(cotacao, ['qtd', 'quantidade'])
+    c_vlr = achar_coluna(cotacao, ['vlr. unitário', 'vlr unitario', 'unitario', 'preço', 'preco'])
+    c_forn = achar_coluna(cotacao, ['fornecedor', 'empresa'])
+    c_status = achar_coluna(cotacao, ['status'])
+
+    # Filtra apenas o fornecedor vencedor (melhor preço) caso haja múltiplas linhas por item no Excel do TOTVS
+    if c_status and not cotacao.empty:
+        df_vencedores = cotacao[cotacao[c_status].astype(str).str.contains('vencedor|melhor preço', case=False, na=False)]
+        if not df_vencedores.empty:
+            cotacao = df_vencedores
+
+    # Remove duplicadas por código de produto para garantir exatamente 1 linha por item real
+    if c_cod and not cotacao.empty:
+        cotacao = cotacao.drop_duplicates(subset=[c_cod])
+
     resultados = []
     item_contador = 1
 
     for idx, row in cotacao.iterrows():
-        # Varre as células da linha para identificar dinamicamente: Código, Descrição, Qtd, Preço Novo e Fornecedor
-        celulas_str = [str(val).strip() for val in row.values if pd.notna(val) and str(val).strip() != '']
-        
-        if not celulas_str:
-            continue
-            
-        # Tenta identificar código (geralmente sequências numéricas longas ou SKUs)
-        codigo_original = ""
-        desc = "Descrição não informada"
-        qtd = 1.0
-        preco_novo = 0.0
-        forn_novo = "Fornecedor não informado"
-        
-        candidatos_numericos = []
-        candidatos_texto = []
-        candidatos_monetarios = []
-        
-        for val in celulas_str:
-            v_limpo = limpar_valor(val)
-            if v_limpo > 0 and ('r$' in val.lower() or ',' in val or '.' in val):
-                candidatos_monetarios.append(v_limpo)
-            elif val.isdigit() and len(val) >= 4:
-                codigo_original = val
-            elif len(val) > 4 and not val.isdigit():
-                candidatos_texto.append(val)
-                
-        if not codigo_original and celulas_str:
-            codigo_original = celulas_str[0]
-            
+        num_item = str(row[c_item] if c_item and pd.notna(row[c_item]) else f"{item_contador:04d}").zfill(4)
+        codigo_original = str(row[c_cod] if c_cod and pd.notna(row[c_cod]) else f"SKU{item_contador}")
         codigo_busca = extrair_numeros(codigo_original)
         
-        if candidatos_texto:
-            desc = candidatos_texto[0]
-            if len(candidatos_texto) > 1:
-                forn_novo = candidatos_texto[-1] # Pega o último texto longo como fornecedor provável
-                
-        if candidatos_monetarios:
-            preco_novo = candidatos_monetarios[-1] # O último valor monetário costuma ser o preço unitário ou total
-            
-        # Ignora linhas que sejam cabeçalhos repetidos
-        if codigo_original.lower() in ['código', 'codigo', 'item', 'produto'] or len(codigo_original) == 0:
+        desc = str(row[c_desc] if c_desc and pd.notna(row[c_desc]) else 'Descrição não informada')
+        qtd = limpar_valor(row[c_qtd] if c_qtd and pd.notna(row[c_qtd]) else 1)
+        preco_novo = limpar_valor(row[c_vlr] if c_vlr and pd.notna(row[c_vlr]) else 0)
+        forn_novo = str(row[c_forn] if c_forn and pd.notna(row[c_forn]) else 'Fornecedor não informado')
+        
+        if codigo_original.lower() in ['código', 'codigo', 'item', 'produto', 'nan']:
             continue
 
-        num_item = f"{item_contador:04d}"
         item_contador += 1
 
-        # Busca rigorosa da última ocorrência do código no histórico
+        # Busca rigorosa da última ocorrência do código no histórico do GitHub
         ultimo_preco = preco_novo
         forn_hist = "Sem Histórico"
         
@@ -323,7 +318,7 @@ else:
     df_final = pd.DataFrame(resultados)
 
     if df_final.empty:
-        st.warning("⚠️ Nenhum item de produto válido foi encontrado no arquivo carregado. Verifique se o arquivo está no formato correto.")
+        st.warning("⚠️ Nenhum item válido encontrado.")
     else:
         colunas_exatas = [
             'Item', 'Código', 'Descrição Resumida', 'Qtd', 
