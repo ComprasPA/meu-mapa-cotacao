@@ -17,12 +17,17 @@ st.set_page_config(
     layout="wide"
 )
 
-# Estilização visual corporativa estilo Dados Bancários e ajuste preciso da altura do expander
+# Estilização visual corporativa estilo Dados Bancários e expansor fixo no topo absoluto de ponta a ponta
 st.markdown("""
     <style>
     .main { background-color: #ffffff; }
     h1 { color: #1f2c34; font-family: 'Helvetica Neue', sans-serif; margin-bottom: 5px; }
     
+    /* Remove padding superior da página para colar o expander no topo */
+    .block-container {
+        padding-top: 1.5rem !important;
+    }
+
     /* Cabeçalho alinhado com status à direita */
     .status-badge {
         background-color: #e8f0fe;
@@ -35,27 +40,24 @@ st.markdown("""
         border: 1px solid #d2e3fc;
     }
 
-    /* Ajuste idêntico ao modelo para o Expander */
+    /* Estilização total do Expander para ocupar de ponta a ponta no topo */
     div[data-testid="stExpander"] {
-        border: none !important;
-        background-color: transparent !important;
+        border: 1px solid #d9d9d9 !important;
+        background-color: #ffffff !important;
+        border-radius: 6px !important;
         box-shadow: none !important;
+        margin-bottom: 20px !important;
     }
     .streamlit-expanderHeader {
-        padding-top: 6px !important;
-        padding-bottom: 6px !important;
-        min-height: 38px !important;
+        padding-top: 8px !important;
+        padding-bottom: 8px !important;
+        min-height: 40px !important;
         font-size: 14px !important;
         background-color: #f8f9fa !important;
-        border: 1px solid #d9d9d9 !important;
         border-radius: 6px !important;
     }
     .streamlit-expanderContent {
-        border: 1px solid #d9d9d9 !important;
-        border-top: none !important;
-        border-bottom-left-radius: 6px !important;
-        border-bottom-right-radius: 6px !important;
-        padding: 12px !important;
+        padding: 15px !important;
         background-color: #ffffff !important;
     }
 
@@ -120,14 +122,18 @@ def carregar_historico_github():
 
 historico, status_historico = carregar_historico_github()
 
-# Caixa Oculta (Abre / Fecha) com altura ajustada
-with st.expander("⚙️ Abrir / Fechar Configurações (Upload e Data Base)", expanded=False):
-    uploaded_cot = st.file_uploader(
-        "Carregar Mapa de Cotação (.csv, .xlsx, .docx ou .mhtml)", 
-        type=["csv", "xlsx", "docx", "mhtml", "html"]
-    )
-
-st.markdown("---")
+# CAIXA DE CONFIGURAÇÕES POSICIONADA NO TOPO ABSOLUTO DA TELA
+with st.expander("⚙️ Abrir / Fechar Configurações (Upload e Exportação PDF)", expanded=False):
+    col_exp1, col_exp2 = st.columns([2, 1])
+    with col_exp1:
+        st.markdown("### 📁 Upload de Arquivo")
+        uploaded_cot = st.file_uploader(
+            "Carregar Mapa de Cotação (.csv, .xlsx, .docx ou .mhtml)", 
+            type=["csv", "xlsx", "docx", "mhtml", "html"]
+        )
+    with col_exp2:
+        st.markdown("### 📥 Exportar Relatório")
+        placeholder_pdf = st.empty()
 
 # Topo do App: Título e Status no canto superior direito
 col_title, col_status = st.columns([7, 3])
@@ -304,7 +310,104 @@ def extrair_tabela_docx_limpa(arquivo_docx):
         st.error(f"Erro ao processar o documento Word: {e}")
     return pd.DataFrame()
 
-cotacao = pd.DataFrame()
+# Função para Gerar PDF do Relatório com colunas ajustadas para 11 colunas somando exatamente 284mm
+def gerar_pdf(df):
+    class PDFProfissional(FPDF):
+        def __init__(self):
+            super().__init__(orientation='L', unit='mm', format='A4')
+            self.set_margins(left=6.4, top=19.1, right=6.4)
+            self.set_auto_page_break(auto=True, margin=19.1)
+
+        def header(self):
+            self.set_fill_color(47, 85, 151)
+            self.rect(6.4, 8, 284.2, 20, 'F')
+            
+            self.set_font("helvetica", "B", 14)
+            self.set_text_color(255, 255, 255)
+            self.set_xy(6.4, 10)
+            self.cell(284.2, 6, limpar_texto_pdf("Mapa de Cotacao & Comparativo Historico"), 0, 1, "C")
+            
+            self.set_font("helvetica", "", 9)
+            self.set_xy(6.4, 16)
+            self.cell(284.2, 5, limpar_texto_pdf("Gestao Estratégica de Compras | Parente Andrade"), 0, 1, "C")
+            self.ln(10)
+
+        def footer(self):
+            self.set_y(-12)
+            self.set_font("helvetica", "I", 8)
+            self.set_text_color(128, 128, 128)
+            data_hora = datetime.datetime.now().strftime("%d/%m/%Y %H:%M")
+            self.cell(0, 8, limpar_texto_pdf(f"Gerado em {data_hora} | Pagina {self.page_no()}"), 0, 0, "C")
+
+    pdf = PDFProfissional()
+    pdf.add_page()
+    
+    col_widths = [9, 20, 52, 9, 18, 40, 18, 40, 18, 20, 20]
+    headers = [
+        "Item", "Codigo", "Descricao", "Qtd", 
+        "Novo Preco", "Forn. Novo", "Ult. Preco", 
+        "Forn. Ant.", "Preco Med.", "Var(%)", "Tendencia"
+    ]
+    
+    pdf.set_fill_color(47, 85, 151)
+    pdf.set_text_color(255, 255, 255)
+    pdf.set_font("helvetica", "B", 7)
+    
+    for i, h in enumerate(headers):
+        pdf.cell(col_widths[i], 7, limpar_texto_pdf(h), border=1, fill=True, align="C")
+    pdf.ln()
+    
+    pdf.set_font("helvetica", "", 6.5)
+    
+    fill = False
+    for _, row in df.iterrows():
+        if fill:
+            pdf.set_fill_color(242, 245, 249)
+        else:
+            pdf.set_fill_color(255, 255, 255)
+            
+        pdf.set_text_color(0, 0, 0)
+        var_val = row['Variação (Δ%)']
+        tendencia = str(row['Tendência'])
+        
+        ult_preco_val = row['Último Preço Hist. (R$)']
+        ult_preco_str = formatar_brl(ult_preco_val) if ult_preco_val != "" else ""
+        forn_ant_str = str(row['Fornecedor do Último Preço']) if ult_preco_val != "" else ""
+        
+        preco_med_val = row['Preço Médio (R$)']
+        preco_med_str = formatar_brl(preco_med_val) if preco_med_val != "" else ""
+        
+        var_str = formatar_pct(var_val) if var_val != "" else ""
+        
+        pdf.cell(col_widths[0], 6, limpar_texto_pdf(str(row['Item'])), border=1, fill=fill, align="C")
+        pdf.cell(col_widths[1], 6, limpar_texto_pdf(str(row['Código'])), border=1, fill=fill, align="C")
+        pdf.cell(col_widths[2], 6, limpar_texto_pdf(str(row['Descrição Resumida'])[:35]), border=1, fill=fill, align="L")
+        pdf.cell(col_widths[3], 6, limpar_texto_pdf(str(row['Qtd'])), border=1, fill=fill, align="C")
+        pdf.cell(col_widths[4], 6, limpar_texto_pdf(formatar_brl(row['Novo Preço Unit. (R$)'])), border=1, fill=fill, align="R")
+        pdf.cell(col_widths[5], 6, limpar_texto_pdf(str(row['Fornecedor do Preço Novo'])[:22]), border=1, fill=fill, align="L")
+        pdf.cell(col_widths[6], 6, limpar_texto_pdf(ult_preco_str), border=1, fill=fill, align="R")
+        pdf.cell(col_widths[7], 6, limpar_texto_pdf(forn_ant_str[:22]), border=1, fill=fill, align="L")
+        pdf.cell(col_widths[8], 6, limpar_texto_pdf(preco_med_str), border=1, fill=fill, align="R")
+        
+        if var_val != "":
+            if var_val < 0:
+                pdf.set_text_color(44, 160, 44)
+            elif var_val > 0:
+                pdf.set_text_color(192, 0, 0)
+            else:
+                pdf.set_text_color(0, 0, 0)
+        
+        pdf.cell(col_widths[9], 6, limpar_texto_pdf(var_str), border=1, fill=fill, align="R")
+        pdf.cell(col_widths[10], 6, limpar_texto_pdf(tendencia), border=1, fill=fill, align="C")
+        
+        pdf.ln()
+        fill = not fill
+        
+    pdf_output = pdf.output(dest='S')
+    if isinstance(pdf_output, str):
+        return pdf_output.encode('latin1')
+    return bytes(pdf_output)
+
 if uploaded_cot is not None:
     with st.spinner("Loading... Processando mapa de cotação e cruzando com o histórico..."):
         nome = uploaded_cot.name.lower()
@@ -320,9 +423,11 @@ if uploaded_cot is not None:
         except Exception as e:
             st.error(f"Erro ao ler arquivo: {e}")
             cotacao = pd.DataFrame()
+else:
+    cotacao = pd.DataFrame()
 
 if cotacao.empty:
-    st.info("👆 Abra a caixa **⚙️ Abrir / Fechar Configurações** acima e faça o upload do seu Mapa de Cotação (.csv, .xlsx, .docx ou .mhtml) para iniciar a análise.")
+    st.info("👆 Abra a caixa **⚙️ Abrir / Fechar Configurações** no topo da tela e faça o upload do seu Mapa de Cotação (.csv, .xlsx, .docx ou .mhtml) para iniciar a análise.")
 else:
     cotacao.columns = [str(c).strip() for c in cotacao.columns]
 
@@ -385,7 +490,6 @@ else:
                     val_celula = str(h_row[col_idx])
                     if padronizar_codigo_10_digitos(val_celula) == codigo_busca and codigo_busca != '0000000000':
                         match_linhas.append(h_row)
-                        # Tenta extrair preço desta ocorrência no histórico
                         try:
                             p_val = limpar_valor(h_row.get(10, 0))
                             if p_val > 0:
@@ -416,7 +520,6 @@ else:
                 except:
                     pass
                 
-                # Cálculo do Preço Médio: Soma dos preços dividida pela quantidade de compras (ocorrências)
                 if precos_encontrados:
                     preco_medio = sum(precos_encontrados) / len(precos_encontrados)
                 elif ultimo_preco > 0:
@@ -466,167 +569,124 @@ else:
 
     df_final = pd.DataFrame(resultados)
 
-    if df_final.empty:
-        st.warning("⚠️ Nenhum item válido encontrado. Verifique o arquivo carregado.")
-    else:
-        colunas_exatas = [
-            'Item', 'Código', 'Descrição Resumida', 'Qtd', 
-            'Novo Preço Unit. (R$)', 'Fornecedor do Preço Novo',
-            'Último Preço Hist. (R$)', 'Fornecedor do Último Preço',
-            'Preço Médio (R$)', 'Variação (Δ%)', 'Tendência'
-        ]
+if not df_final.empty:
+    colunas_exatas = [
+        'Item', 'Código', 'Descrição Resumida', 'Qtd', 
+        'Novo Preço Unit. (R$)', 'Fornecedor do Preço Novo',
+        'Último Preço Hist. (R$)', 'Fornecedor do Último Preço',
+        'Preço Médio (R$)', 'Variação (Δ%)', 'Tendência'
+    ]
 
-        df_final = df_final[colunas_exatas]
+    df_final = df_final[colunas_exatas]
 
-        df_display = df_final.copy()
-        df_display['Qtd'] = df_display['Qtd'].apply(formatar_qtd)
-        df_display['Novo Preço Unit. (R$)'] = df_display['Novo Preço Unit. (R$)'].apply(formatar_brl)
-        df_display['Último Preço Hist. (R$)'] = df_display['Último Preço Hist. (R$)'].apply(formatar_brl)
-        df_display['Preço Médio (R$)'] = df_display['Preço Médio (R$)'].apply(formatar_brl)
-        df_display['Variação (Δ%)'] = df_final['Variação (Δ%)'].apply(formatar_pct_com_seta)
+    df_display = df_final.copy()
+    df_display['Qtd'] = df_display['Qtd'].apply(formatar_qtd)
+    df_display['Novo Preço Unit. (R$)'] = df_display['Novo Preço Unit. (R$)'].apply(formatar_brl)
+    df_display['Último Preço Hist. (R$)'] = df_display['Último Preço Hist. (R$)'].apply(formatar_brl)
+    df_display['Preço Médio (R$)'] = df_display['Preço Médio (R$)'].apply(formatar_brl)
+    df_display['Variação (Δ%)'] = df_final['Variação (Δ%)'].apply(formatar_pct_com_seta)
 
-        # Exibição do painel interativo formatado com classe CSS 'dataframe' (Estilo Dados Bancários)
-        st.subheader("📋 Mapa de Cotação Consolidado & Comparativo Histórico")
+    # Exibição do painel interativo formatado com classe CSS 'dataframe' (Estilo Dados Bancários)
+    st.subheader("📋 Mapa de Cotação Consolidado & Comparativo Histórico")
 
-        html_tabela = df_display.to_html(escape=False, index=False, classes='dataframe')
-        st.markdown(html_tabela, unsafe_allow_html=True)
+    html_tabela = df_display.to_html(escape=False, index=False, classes='dataframe')
+    st.markdown(html_tabela, unsafe_allow_html=True)
 
-        # Configuração da Classe do PDF com Margens Estreitas (Esq/Dir: 0.64cm = 6.4mm, Sup/Inf: 1.91cm = 19.1mm)
-        class PDFProfissional(FPDF):
-            def __init__(self):
-                super().__init__(orientation='L', unit='mm', format='A4')
-                self.set_margins(left=6.4, top=19.1, right=6.4)
-                self.set_auto_page_break(auto=True, margin=19.1)
+    # Preenche o botão de download de PDF dentro da caixa retrátil superior
+    pdf_bytes = gerar_pdf(df_final)
+    placeholder_pdf.download_button(
+        label="📥 Baixar Mapa em PDF",
+        data=pdf_bytes,
+        file_name="mapa_de_cotacao_suprimentos.pdf",
+        mime="application/pdf",
+        key="btn_pdf_top"
+    )
 
-            def header(self):
-                self.set_fill_color(47, 85, 151)
-                self.rect(6.4, 8, 284.2, 20, 'F')
-                
-                self.set_font("helvetica", "B", 14)
-                self.set_text_color(255, 255, 255)
-                self.set_xy(6.4, 10)
-                self.cell(284.2, 6, limpar_texto_pdf("Mapa de Cotacao & Comparativo Historico"), 0, 1, "C")
-                
-                self.set_font("helvetica", "", 9)
-                self.set_xy(6.4, 16)
-                self.cell(284.2, 5, limpar_texto_pdf("Gestao Estratégica de Compras | Parente Andrade"), 0, 1, "C")
-                self.ln(10)
+    # Bloco de Pesquisa por Código do Item posicionado abaixo do mapa
+    st.markdown("---")
+    st.subheader("🔍 Consulta de Histórico por Código do Item")
+    
+    col_search1, col_search2 = st.columns([3, 7])
+    with col_search1:
+        codigo_pesquisa = st.text_input("Digite ou cole o código do item (10 dígitos ou parcial):", "")
 
-            def footer(self):
-                self.set_y(-12)
-                self.set_font("helvetica", "I", 8)
-                self.set_text_color(128, 128, 128)
-                data_hora = datetime.datetime.now().strftime("%d/%m/%Y %H:%M")
-                self.cell(0, 8, limpar_texto_pdf(f"Gerado em {data_hora} | Pagina {self.page_no()}"), 0, 0, "C")
+    if codigo_pesquisa:
+        cod_limpo = padronizar_codigo_10_digitos(codigo_pesquisa)
+        compras_encontradas = []
+        
+        if not historico.empty:
+            for h_idx, h_row in historico.iterrows():
+                encontrou = False
+                for col_idx in h_row.index:
+                    val_celula = str(h_row[col_idx])
+                    if cod_limpo in padronizar_codigo_10_digitos(val_celula) and cod_limpo != '0000000000':
+                        encontrou = True
+                        break
+                if encontrou:
+                    forn_val = "Não identificado"
+                    preco_val = 0.0
+                    try:
+                        f_col = str(h_row.get(4, ""))
+                        if len(f_col) > 3 and f_col.lower() not in ['nan', 'a vista', '25 dias']:
+                            forn_val = f_col
+                        else:
+                            for val in h_row.values:
+                                t = str(val)
+                                if len(t) > 5 and not any(char.isdigit() for char in t[:3]) and t.lower() not in ['a vista', '25 dias']:
+                                    forn_val = t
+                                    break
+                    except:
+                        pass
+                        
+                    try:
+                        p_col = limpar_valor(h_row.get(10, 0))
+                        if p_col > 0:
+                            preco_val = p_col
+                        else:
+                            for val in h_row.values:
+                                v = limpar_valor(val)
+                                if v > 1.0:
+                                    preco_val = v
+                                    break
+                    except:
+                        pass
+                        
+                    compras_encontradas.append({
+                        'Fornecedor da Compra': forn_val,
+                        'Preço Praticado (R$)': formatar_brl(preco_val) if preco_val > 0 else "R$ 0,00"
+                    })
 
-        # Função para Gerar PDF do Relatório com colunas ajustadas para 11 colunas somando exatamente 284mm
-        def gerar_pdf(df):
-            pdf = PDFProfissional()
-            pdf.add_page()
-            
-            # Larguras ajustadas para 11 colunas cabendo perfeitamente nos 284mm úteis
-            col_widths = [9, 20, 52, 9, 18, 40, 18, 40, 18, 20, 20]
-            headers = [
-                "Item", "Codigo", "Descricao", "Qtd", 
-                "Novo Preco", "Forn. Novo", "Ult. Preco", 
-                "Forn. Ant.", "Preco Med.", "Var(%)", "Tendencia"
-            ]
-            
-            pdf.set_fill_color(47, 85, 151)
-            pdf.set_text_color(255, 255, 255)
-            pdf.set_font("helvetica", "B", 7)
-            
-            for i, h in enumerate(headers):
-                pdf.cell(col_widths[i], 7, limpar_texto_pdf(h), border=1, fill=True, align="C")
-            pdf.ln()
-            
-            pdf.set_font("helvetica", "", 6.5)
-            
-            fill = False
-            for _, row in df.iterrows():
-                if fill:
-                    pdf.set_fill_color(242, 245, 249)
-                else:
-                    pdf.set_fill_color(255, 255, 255)
-                    
-                pdf.set_text_color(0, 0, 0)
-                var_val = row['Variação (Δ%)']
-                tendencia = str(row['Tendência'])
-                
-                ult_preco_val = row['Último Preço Hist. (R$)']
-                ult_preco_str = formatar_brl(ult_preco_val) if ult_preco_val != "" else ""
-                forn_ant_str = str(row['Fornecedor do Último Preço']) if ult_preco_val != "" else ""
-                
-                preco_med_val = row['Preço Médio (R$)']
-                preco_med_str = formatar_brl(preco_med_val) if preco_med_val != "" else ""
-                
-                var_str = formatar_pct(var_val) if var_val != "" else ""
-                
-                pdf.cell(col_widths[0], 6, limpar_texto_pdf(str(row['Item'])), border=1, fill=fill, align="C")
-                pdf.cell(col_widths[1], 6, limpar_texto_pdf(str(row['Código'])), border=1, fill=fill, align="C")
-                pdf.cell(col_widths[2], 6, limpar_texto_pdf(str(row['Descrição Resumida'])[:35]), border=1, fill=fill, align="L")
-                pdf.cell(col_widths[3], 6, limpar_texto_pdf(str(row['Qtd'])), border=1, fill=fill, align="C")
-                pdf.cell(col_widths[4], 6, limpar_texto_pdf(formatar_brl(row['Novo Preço Unit. (R$)'])), border=1, fill=fill, align="R")
-                pdf.cell(col_widths[5], 6, limpar_texto_pdf(str(row['Fornecedor do Preço Novo'])[:22]), border=1, fill=fill, align="L")
-                pdf.cell(col_widths[6], 6, limpar_texto_pdf(ult_preco_str), border=1, fill=fill, align="R")
-                pdf.cell(col_widths[7], 6, limpar_texto_pdf(forn_ant_str[:22]), border=1, fill=fill, align="L")
-                pdf.cell(col_widths[8], 6, limpar_texto_pdf(preco_med_str), border=1, fill=fill, align="R")
-                
-                if var_val != "":
-                    if var_val < 0:
-                        pdf.set_text_color(44, 160, 44)
-                    elif var_val > 0:
-                        pdf.set_text_color(192, 0, 0)
-                    else:
-                        pdf.set_text_color(0, 0, 0)
-                
-                pdf.cell(col_widths[9], 6, limpar_texto_pdf(var_str), border=1, fill=fill, align="R")
-                pdf.cell(col_widths[10], 6, limpar_texto_pdf(tendencia), border=1, fill=fill, align="C")
-                
-                pdf.ln()
-                fill = not fill
-                
-            pdf_output = pdf.output(dest='S')
-            if isinstance(pdf_output, str):
-                return pdf_output.encode('latin1')
-            return bytes(pdf_output)
-
-        # Botão de Download em PDF na interface principal
-        st.markdown("---")
-        col_bt1, col_bt2 = st.columns([2, 8])
-        with col_bt1:
-            pdf_bytes = gerar_pdf(df_final)
-            st.download_button(
-                label="📥 Baixar Mapa em PDF",
-                data=pdf_bytes,
-                file_name="mapa_de_cotacao_suprimentos.pdf",
-                mime="application/pdf"
-            )
-
-        # Bloco de Observações Técnicas (ZFM e Logística)
-        st.markdown("---")
-        st.subheader("🔍 Observações Logísticas e Fiscais (ZFM)")
-        st.markdown("""
-        * **Impacto Logístico:** Avaliação do custo total de frete (modal aéreo/fluvial) para suprimentos oriundos de 'Fora do Estado' em comparación com fornecedores locais de Manaus.
-        * **Incentivos Fiscais:** Validação da aplicação correta dos benefícios tributários da Zona Franca de Manaus (ZFM) para preservação de margem.
-        * **Picos Fora da Curva:** Análise crítica obrigatória em variações superiores a +5%, verificando oscilações de matéria-prima e custos logísticos antes da emissão da O.C.
-        """)
-
-        # Seção Obrigatória: Insight Rápido do Especialista
-        st.markdown("---")
-        st.subheader("💡 Insight Rápido do Especialista")
-
-        itens_em_queda = df_final[(df_final['Variação (Δ%)'] != "") & (pd.to_numeric(df_final['Variação (Δ%)']) < 0)]
-        if not itens_em_queda.empty:
-            insight_texto = (
-                f"Identificada oportunidade expressiva de economia em **{len(itens_em_queda)} item(ns)** com redução de custos favorável. "
-                "Recomenda-se a **homologação imediata com o novo fornecedor** para captura dos ganhos de margem, "
-                "certificando-se de que os prazos de entrega e condições logísticas para Manaus atendem ao cronograma operacional."
-            )
+        if compras_encontradas:
+            st.success(f"Foram encontradas **{len(compras_encontradas)}** ocorrência(s) de compra para o código pesquisado:")
+            df_historico_item = pd.DataFrame(compras_encontradas)
+            st.table(df_historico_item)
         else:
-            insight_texto = (
-                "Cenário de alta nos preços detectado ou itens sem histórico prévio. Recomenda-se a **renegociação com base no histórico de volume** "
-                "ou busca por fornecedores alternativos na praça local para evitar impacto no orçamento."
-            )
+            st.warning("⚠️ Nenhuma compra anterior encontrada no histórico para este código.")
 
-        st.success(insight_texto)
+    # Bloco de Observações Técnicas (ZFM e Logística)
+    st.markdown("---")
+    st.subheader("🔍 Observações Logísticas e Fiscais (ZFM)")
+    st.markdown("""
+    * **Impacto Logístico:** Avaliação do custo total de frete (modal aéreo/fluvial) para suprimentos oriundos de 'Fora do Estado' em comparação com fornecedores locais de Manaus.
+    * **Incentivos Fiscais:** Validação da aplicação correta dos benefícios tributários da Zona Franca de Manaus (ZFM) para preservação de margem.
+    * **Picos Fora da Curva:** Análise crítica obrigatória em variações superiores a +5%, verificando oscilações de matéria-prima e custos logísticos antes da emissão da O.C.
+    """)
+
+    # Seção Obrigatória: Insight Rápido do Especialista
+    st.markdown("---")
+    st.subheader("💡 Insight Rápido do Especialista")
+
+    itens_em_queda = df_final[(df_final['Variação (Δ%)'] != "") & (pd.to_numeric(df_final['Variação (Δ%)']) < 0)]
+    if not itens_em_queda.empty:
+        insight_texto = (
+            f"Identificada oportunidade expressiva de economia em **{len(itens_em_queda)} item(ns)** com redução de custos favorável. "
+            "Recomenda-se a **homologação imediata com o novo fornecedor** para captura dos ganhos de margem, "
+            "certificando-se de que os prazos de entrega e condições logísticas para Manaus atendem ao cronograma operacional."
+        )
+    else:
+        insight_texto = (
+            "Cenário de alta nos preços detectado ou itens sem histórico prévio. Recomenda-se a **renegociação com base no histórico de volume** "
+            "ou busca por fornecedores alternativos na praça local para evitar impacto no orçamento."
+        )
+
+    st.success(insight_texto)
