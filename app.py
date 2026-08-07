@@ -17,7 +17,7 @@ st.set_page_config(
     layout="wide"
 )
 
-# Estilização visual corporativa estilo Dados Bancários e limpeza de elementos nativos
+# Estilização visual corporativa estilo Dados Bancários
 st.markdown("""
     <style>
     .main { background-color: #ffffff; }
