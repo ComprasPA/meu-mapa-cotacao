@@ -1,7 +1,8 @@
 streamlit
 pandas
 numpy
-python-docx
+docx
 fpdf2
 beautifulsoup4
 openpyxl
+plotly
