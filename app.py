@@ -9,6 +9,7 @@ import email
 from bs4 import BeautifulSoup
 import datetime
 import time
+import plotly.express as px
 
 # Configuração da Página
 st.set_page_config(
@@ -695,41 +696,48 @@ else:
             df_historico_item = pd.DataFrame(compras_encontradas)
             st.table(df_historico_item)
 
-            # GRÁFICO DE LINHA NATIVO ORDENADO CRONOLOGICAMENTE
-            import plotly.express as px
-
-if dados_grafico:
-    st.markdown("#### 📈 Evolução do Preço Histórico")
-    df_chart = pd.DataFrame(dados_grafico).sort_values("Data Emissao")
-    
-    # Formata a data para string legível no eixo X
-    df_chart["Data Formatada"] = df_chart["Data Emissao"].dt.strftime('%d/%m/%Y')
-    
-    # Cria o gráfico suavizado com curva ('spline') e preenchimento de área abaixo
-    fig = px.line(
-        df_chart, 
-        x="Data Formatada", 
-        y="Prc Unitario",
-        markers=True,
-        line_shape="spline" 
-    )
-    
-    # Estilização visual (linhas e área sombreada)
-    fig.update_traces(
-        fill='tozeroy', 
-        line=dict(color='#00d2c4', width=3), 
-        marker=dict(size=8, color='#00d2c4')
-    )
-    
-    fig.update_layout(
-        xaxis_title="Data Emissao",
-        yaxis_title="Prc Unitario",
-        plot_bgcolor='rgba(0,0,0,0)',
-        paper_bgcolor='rgba(0,0,0,0)',
-        font=dict(color='white'),
-        xaxis=dict(showgrid=False),
-        yaxis=dict(showgrid=True, gridcolor='rgba(255,255,255,0.1)'),
-        margin=dict(l=20, r=20, t=20, b=20)
-    )
-    
-    st.plotly_chart(fig, use_container_width=True)
+            # GRÁFICO DE LINHA SUAVIZADA (CURVA) COM PLOTLY, LINHAS DE GRADE E ESCALA DE 0.50
+            if dados_grafico:
+                st.markdown("#### 📈 Evolução do Preço Histórico")
+                df_chart = pd.DataFrame(dados_grafico).sort_values("Data Emissao")
+                
+                df_chart["Data Formatada"] = df_chart["Data Emissao"].dt.strftime('%d/%m/%Y')
+                
+                # Formatando os valores monetários exatamente com duas casas decimais no padrão brasileiro para o gráfico
+                df_chart["Preço Formatado BR"] = df_chart["Prc Unitario"].apply(lambda x: f"R$ {x:,.2f}".replace(',', 'X').replace('.', ',').replace('X', '.'))
+                
+                fig = px.line(
+                    df_chart, 
+                    x="Data Formatada", 
+                    y="Prc Unitario",
+                    markers=True,
+                    line_shape="spline", # Curva suavizada idêntica à referência
+                    text="Preço Formatado BR"
+                )
+                
+                fig.update_traces(
+                    fill='tozeroy', # Preenchimento de área abaixo da curva
+                    line=dict(color='#00d2c4', width=3),
+                    marker=dict(size=8, color='#00d2c4'),
+                    textposition="top center"
+                )
+                
+                # Configurando as linhas de grade visíveis e o espaçamento do eixo Y de 0.50 em 0.50
+                fig.update_layout(
+                    xaxis_title="Data Emissao",
+                    yaxis_title="Prc Unitario",
+                    plot_bgcolor='rgba(255,255,255,0.02)',
+                    paper_bgcolor='rgba(0,0,0,0)',
+                    font=dict(color='#333333'),
+                    xaxis=dict(showgrid=True, gridcolor='rgba(200,200,200,0.3)'),
+                    yaxis=dict(
+                        showgrid=True, 
+                        gridcolor='rgba(200,200,200,0.3)',
+                        dtick=0.50 # Define explicitamente a divisão da escala de 0.50 em 0.50
+                    ),
+                    margin=dict(l=20, r=20, t=30, b=20)
+                )
+                
+                st.plotly_chart(fig, use_container_width=True)
+        else:
+            st.warning("⚠️ Nenhuma compra anterior encontrada no histórico para este código.")
