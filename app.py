@@ -9,7 +9,6 @@ import email
 from bs4 import BeautifulSoup
 import datetime
 import time
-import plotly.express as px  # Importando Plotly para gráficos suavizados de curva
 
 # Configuração da Página
 st.set_page_config(
@@ -623,7 +622,7 @@ else:
         key="btn_pdf_top"
     )
 
-    # Bloco de Pesquisa por Código do Item posicionado abaixo do mapa com Gráfico ajustado (Coluna M = Data Emissao, Coluna K = Prc Unitario)
+    # Bloco de Pesquisa por Código do Item posicionado abaixo do mapa com Gráfico ajustado
     st.markdown("---")
     st.subheader("🔍 Consulta de Histórico por Código do Item")
     
@@ -641,7 +640,7 @@ else:
                 encontrou = False
                 for col_idx in h_row.index:
                     val_celula = str(h_row[col_idx])
-                    if cod_limpo in padronizar_codigo_10_digitos(val_celula) and codigo_busca != '0000000000':
+                    if cod_limpo in padronizar_codigo_10_digitos(val_celula) and cod_limpo != '0000000000':
                         encontrou = True
                         break
                 
@@ -696,41 +695,14 @@ else:
             df_historico_item = pd.DataFrame(compras_encontradas)
             st.table(df_historico_item)
 
-            # GRÁFICO DE LINHA SUAVIZADA (CURVA) COM ÁREA SOMBREADA USANDO PLOTLY
+            # GRÁFICO DE LINHA NATIVO ORDENADO CRONOLOGICAMENTE
             if dados_grafico:
                 st.markdown("#### 📈 Evolução do Preço Histórico")
                 df_chart = pd.DataFrame(dados_grafico).sort_values("Data Emissao")
                 
-                # Formata a data para string legível no eixo X do Plotly
-                df_chart["Data Formatada"] = df_chart["Data Emissao"].dt.strftime('%d/%m/%Y')
+                df_chart_display = df_chart.copy()
+                df_chart_display["Data Emissao"] = df_chart_display["Data Emissao"].dt.strftime('%d/%m/%Y')
                 
-                # Criando o gráfico suavizado com Plotly (linha em curva 'spline' e preenchimento de área)
-                fig = px.line(
-                    df_chart, 
-                    x="Data Formatada", 
-                    y="Prc Unitario",
-                    markers=True,
-                    line_shape="spline" # Aplica o efeito de linha suavizada/curva exato da foto
-                )
-                
-                # Customizações visuais para combinar com o design escuro/elegante da referência
-                fig.update_traces(
-                    fill='tozeroy', # Preenche a área abaixo da curva
-                    line=dict(color='#00d2c4', width=3), # Cor verde/ciano da linha
-                    marker=dict(size=8, color='#00d2c4')
-                )
-                
-                fig.update_layout(
-                    xaxis_title="Data Emissao",
-                    yaxis_title="Prc Unitario",
-                    plot_bgcolor='rgba(0,0,0,0)',
-                    paper_bgcolor='rgba(0,0,0,0)',
-                    font=dict(color='white'),
-                    xaxis=dict(showgrid=False),
-                    yaxis=dict(showgrid=True, gridcolor='rgba(255,255,255,0.1)'),
-                    margin=dict(l=20, r=20, t=20, b=20)
-                )
-                
-                st.plotly_chart(fig, use_container_width=True)
+                st.line_chart(df_chart_display.set_index("Data Emissao")["Prc Unitario"])
         else:
             st.warning("⚠️ Nenhuma compra anterior encontrada no histórico para este código.")
