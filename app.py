@@ -696,13 +696,40 @@ else:
             st.table(df_historico_item)
 
             # GRÁFICO DE LINHA NATIVO ORDENADO CRONOLOGICAMENTE
-            if dados_grafico:
-                st.markdown("#### 📈 Evolução do Preço Histórico")
-                df_chart = pd.DataFrame(dados_grafico).sort_values("Data Emissao")
-                
-                df_chart_display = df_chart.copy()
-                df_chart_display["Data Emissao"] = df_chart_display["Data Emissao"].dt.strftime('%d/%m/%Y')
-                
-                st.line_chart(df_chart_display.set_index("Data Emissao")["Prc Unitario"])
-        else:
-            st.warning("⚠️ Nenhuma compra anterior encontrada no histórico para este código.")
+            import plotly.express as px
+
+if dados_grafico:
+    st.markdown("#### 📈 Evolução do Preço Histórico")
+    df_chart = pd.DataFrame(dados_grafico).sort_values("Data Emissao")
+    
+    # Formata a data para string legível no eixo X
+    df_chart["Data Formatada"] = df_chart["Data Emissao"].dt.strftime('%d/%m/%Y')
+    
+    # Cria o gráfico suavizado com curva ('spline') e preenchimento de área abaixo
+    fig = px.line(
+        df_chart, 
+        x="Data Formatada", 
+        y="Prc Unitario",
+        markers=True,
+        line_shape="spline" 
+    )
+    
+    # Estilização visual (linhas e área sombreada)
+    fig.update_traces(
+        fill='tozeroy', 
+        line=dict(color='#00d2c4', width=3), 
+        marker=dict(size=8, color='#00d2c4')
+    )
+    
+    fig.update_layout(
+        xaxis_title="Data Emissao",
+        yaxis_title="Prc Unitario",
+        plot_bgcolor='rgba(0,0,0,0)',
+        paper_bgcolor='rgba(0,0,0,0)',
+        font=dict(color='white'),
+        xaxis=dict(showgrid=False),
+        yaxis=dict(showgrid=True, gridcolor='rgba(255,255,255,0.1)'),
+        margin=dict(l=20, r=20, t=20, b=20)
+    )
+    
+    st.plotly_chart(fig, use_container_width=True)
