@@ -16,7 +16,7 @@ st.set_page_config(
     layout="wide"
 )
 
-# Estilização visual corporativa estilo Dados Bancários e ocultação da barra superior do Streamlit
+# Estilização visual corporativa, ocultação dos botões do Streamlit e anulação do pop-up de cache
 st.markdown("""
     <style>
     .main { background-color: #ffffff; }
@@ -30,6 +30,11 @@ st.markdown("""
     header { visibility: hidden !important; }
     #MainMenu { visibility: hidden !important; }
     footer { visibility: hidden !important; }
+
+    /* Anula e oculta qualquer pop-up ou modal de Clear Caches nativo do Streamlit */
+    div[data-baseweb="modal"], div.stDialog, div[role="dialog"] {
+        display: none !important;
+    }
 
     /* Cabeçalho alinhado com status à direita */
     .status-badge {
@@ -194,7 +199,7 @@ def formatar_pct(valor):
     try:
         val_float = float(valor)
     except:
-        val_float = ""
+        val_float = 0.0
     return f"{val_float:+,.2f}%".replace(',', 'X').replace('.', ',').replace('X', '.')
 
 def formatar_pct_com_seta(valor):
@@ -203,7 +208,7 @@ def formatar_pct_com_seta(valor):
     try:
         val_float = float(valor)
     except:
-        return ""
+        val_float = 0.0
     
     val_fmt = f"{val_float:+,.2f}%".replace(',', 'X').replace('.', ',').replace('X', '.')
     
@@ -608,7 +613,7 @@ else:
         key="btn_pdf_top"
     )
 
-    # Bloco de Pesquisa por Código do Item posicionado abaixo do mapa
+    # Bloco de Pesquisa por Código do Item posicionado abaixo do mapa com Gráfico de Linha da Evolução de Preços
     st.markdown("---")
     st.subheader("🔍 Consulta de Histórico por Código do Item")
     
@@ -619,6 +624,7 @@ else:
     if codigo_pesquisa:
         cod_limpo = padronizar_codigo_10_digitos(codigo_pesquisa)
         compras_encontradas = []
+        precos_historicos_grafico = []
         
         if not historico.empty:
             for h_idx, h_row in historico.iterrows():
@@ -661,38 +667,21 @@ else:
                         'Fornecedor da Compra': forn_val,
                         'Preço Praticado (R$)': formatar_brl(preco_val) if preco_val > 0 else "R$ 0,00"
                     })
+                    if preco_val > 0:
+                        precos_historicos_grafico.append(preco_val)
 
         if compras_encontradas:
             st.success(f"Foram encontradas **{len(compras_encontradas)}** ocorrência(s) de compra para o código pesquisado:")
             df_historico_item = pd.DataFrame(compras_encontradas)
             st.table(df_historico_item)
+
+            # GRÁFICO DE LINHA DA EVOLUÇÃO DE PREÇOS
+            if precos_historicos_grafico:
+                st.markdown("#### 📈 Evolução do Preço Histórico do Item")
+                df_chart = pd.DataFrame({
+                    "Ocorrência de Compra": [f"Compra {i+1}" for i in range(len(precos_historicos_grafico))],
+                    "Preço Unitário (R$)": precos_historicos_grafico
+                }).set_index("Ocorrência de Compra")
+                st.line_chart(df_chart)
         else:
             st.warning("⚠️ Nenhuma compra anterior encontrada no histórico para este código.")
-
-    # Bloco de Observações Técnicas (ZFM e Logística)
-    st.markdown("---")
-    st.subheader("🔍 Observações Logísticas e Fiscais (ZFM)")
-    st.markdown("""
-    * **Impacto Logístico:** Avaliação do custo total de frete (modal aéreo/fluvial) para suprimentos oriundos de 'Fora do Estado' em comparação com fornecedores locais de Manaus.
-    * **Incentivos Fiscais:** Validar a aplicação correta dos benefícios tributários da Zona Franca de Manaus (ZFM) para preservação de margem.
-    * **Picos Fora da Curva:** Análise crítica obrigatória em variações superiores a +5%, verificando oscilações de matéria-prima e custos logísticos antes da emissão da O.C.
-    """)
-
-    # Seção Obrigatória: Insight Rápido do Especialista
-    st.markdown("---")
-    st.subheader("💡 Insight Rápido do Especialista")
-
-    itens_em_queda = df_final[(df_final['Variação (Δ%)'] != "") & (pd.to_numeric(df_final['Variação (Δ%)']) < 0)]
-    if not itens_em_queda.empty:
-        insight_texto = (
-            f"Identificada oportunidade expressiva de economia em **{len(itens_em_queda)} item(ns)** com redução de custos favorável. "
-            "Recomenda-se a **homologação imediata com o novo fornecedor** para captura dos ganhos de margem, "
-            "certificando-se de que os prazos de entrega e condições logísticas para Manaus atendem ao cronograma operacional."
-        )
-    else:
-        insight_texto = (
-            "Cenário de alta nos preços detectado ou itens sem histórico prévio. Recomenda-se a **renegociação com base no histórico de volume** "
-            "ou busca por fornecedores alternativos na praça local para evitar impacto no orçamento."
-        )
-
-    st.success(insight_texto)
