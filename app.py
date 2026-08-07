@@ -8,7 +8,6 @@ import unicodedata
 import email
 from bs4 import BeautifulSoup
 import datetime
-import time
 
 # Configuração da Página
 st.set_page_config(
@@ -37,6 +36,27 @@ st.markdown("""
         font-weight: 600;
         font-family: 'Helvetica Neue', sans-serif;
         border: 1px solid #d2e3fc;
+    }
+
+    /* Expander fixo no topo de ponta a ponta */
+    div[data-testid="stExpander"] {
+        border: 1px solid #d9d9d9 !important;
+        background-color: #ffffff !important;
+        border-radius: 6px !important;
+        box-shadow: none !important;
+        margin-bottom: 20px !important;
+    }
+    .streamlit-expanderHeader {
+        padding-top: 8px !important;
+        padding-bottom: 8px !important;
+        min-height: 40px !important;
+        font-size: 14px !important;
+        background-color: #f8f9fa !important;
+        border-radius: 6px !important;
+    }
+    .streamlit-expanderContent {
+        padding: 15px !important;
+        background-color: #ffffff !important;
     }
 
     /* Estilização da Tabela no Estilo Dados Bancários */
@@ -100,19 +120,8 @@ def carregar_historico_github():
 
 historico, status_historico = carregar_historico_github()
 
-# Controle de estado para mostrar/ocultar painel de configurações sem caixas visíveis
-if 'mostrar_config' not in st.session_state:
-    st.session_state.mostrar_config = False
-
-col_btn_toggle, col_empty = st.columns([2, 8])
-with col_btn_toggle:
-    if st.button("⚙️ Abrir / Fechar Configurações (Upload e Exportação PDF)"):
-        st.session_state.mostrar_config = not st.session_state.mostrar_config
-
-uploaded_cot = None
-placeholder_pdf = None
-
-if st.session_state.mostrar_config:
+# CAIXA DE CONFIGURAÇÕES (ABRE/FECHA FIXA NO TOPO)
+with st.expander("⚙️ Abrir / Fechar Configurações (Upload e Exportação PDF)", expanded=False):
     col_exp1, col_exp2 = st.columns([2, 1])
     with col_exp1:
         st.markdown("### 📁 Upload de Arquivo")
@@ -123,7 +132,6 @@ if st.session_state.mostrar_config:
     with col_exp2:
         st.markdown("### 📥 Exportar Relatório")
         placeholder_pdf = st.empty()
-    st.markdown("---")
 
 # Topo do App: Título e Status no canto superior direito
 col_title, col_status = st.columns([7, 3])
@@ -398,6 +406,7 @@ def gerar_pdf(df):
         return pdf_output.encode('latin1')
     return bytes(pdf_output)
 
+cotacao = pd.DataFrame()
 if uploaded_cot is not None:
     with st.spinner("Loading... Processando mapa de cotação e cruzando com o histórico..."):
         nome = uploaded_cot.name.lower()
@@ -413,8 +422,6 @@ if uploaded_cot is not None:
         except Exception as e:
             st.error(f"Erro ao ler arquivo: {e}")
             cotacao = pd.DataFrame()
-else:
-    cotacao = pd.DataFrame()
 
 df_final = pd.DataFrame()
 
@@ -560,7 +567,7 @@ if not cotacao.empty:
     df_final = pd.DataFrame(resultados)
 
 if cotacao.empty:
-    st.info("👆 Clique no botão **⚙️ Abrir / Fechar Configurações** acima e faça o upload do seu Mapa de Cotação (.csv, .xlsx, .docx ou .mhtml) para iniciar a análise.")
+    st.info("👆 Clique na caixa **⚙️ Abrir / Fechar Configurações** acima e faça o upload do seu Mapa de Cotação (.csv, .xlsx, .docx ou .mhtml) para iniciar a análise.")
 elif df_final.empty:
     st.warning("⚠️ Nenhum item válido encontrado. Verifique o arquivo carregado.")
 else:
@@ -586,16 +593,15 @@ else:
     html_tabela = df_display.to_html(escape=False, index=False, classes='dataframe')
     st.markdown(html_tabela, unsafe_allow_html=True)
 
-    # Preenche o botão de download de PDF na caixa superior aberta
-    if st.session_state.mostrar_config and placeholder_pdf is not None:
-        pdf_bytes = gerar_pdf(df_final)
-        placeholder_pdf.download_button(
-            label="📥 Baixar Mapa em PDF",
-            data=pdf_bytes,
-            file_name="mapa_de_cotacao_suprimentos.pdf",
-            mime="application/pdf",
-            key="btn_pdf_top"
-        )
+    # Preenche o botão de download de PDF dentro da caixa superior aberta
+    pdf_bytes = gerar_pdf(df_final)
+    placeholder_pdf.download_button(
+        label="📥 Baixar Mapa em PDF",
+        data=pdf_bytes,
+        file_name="mapa_de_cotacao_suprimentos.pdf",
+        mime="application/pdf",
+        key="btn_pdf_top"
+    )
 
     # Bloco de Pesquisa por Código do Item posicionado abaixo do mapa
     st.markdown("---")
