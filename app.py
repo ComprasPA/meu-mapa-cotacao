@@ -8,6 +8,7 @@ import unicodedata
 import email
 from bs4 import BeautifulSoup
 import datetime
+import time
 
 # Configuração da Página
 st.set_page_config(
@@ -122,9 +123,11 @@ def carregar_historico_github():
             return pd.DataFrame(), f"Erro ao ler historico_compras.csv: {e}"
     else:
         df = pd.DataFrame({
+            2: ['174781'],
             4: ['CAA COMERCIO AMAZONENSE DE ALUMINIO LTDA.'], 
             6: ['0000005177'],                              
-            10: ['375.58']                                   
+            10: ['375.58'],
+            12: ['05/01/2026']
         })
         return df, "Base de dados atualizada em: Indisponível"
 
@@ -418,20 +421,26 @@ def gerar_pdf(df):
 
 cotacao = pd.DataFrame()
 if uploaded_cot is not None:
-    with st.spinner("Loading... Processando mapa de cotação e cruzando com o histórico..."):
-        nome = uploaded_cot.name.lower()
-        try:
-            if nome.endswith('.csv'):
-                cotacao = pd.read_csv(uploaded_cot, dtype=str)
-            elif nome.endswith(('.xlsx', '.xls')):
-                cotacao = extrair_tabela_excel_inteligente(uploaded_cot)
-            elif nome.endswith('.docx'):
-                cotacao = extrair_tabela_docx_limpa(uploaded_cot)
-            elif nome.endswith(('.mhtml', '.html', '.mht')):
-                cotacao = extrair_tabela_mhtml(uploaded_cot)
-        except Exception as e:
-            st.error(f"Erro ao ler arquivo: {e}")
-            cotacao = pd.DataFrame()
+    bar = st.progress(0)
+    st.text("Processando dados...")
+    for i in range(100):
+        time.sleep(0.01)
+        bar.progress(i + 1)
+        
+    nome = uploaded_cot.name.lower()
+    try:
+        if nome.endswith('.csv'):
+            cotacao = pd.read_csv(uploaded_cot, dtype=str)
+        elif nome.endswith(('.xlsx', '.xls')):
+            cotacao = extrair_tabela_excel_inteligente(uploaded_cot)
+        elif nome.endswith('.docx'):
+            cotacao = extrair_tabela_docx_limpa(uploaded_cot)
+        elif nome.endswith(('.mhtml', '.html', '.mht')):
+            cotacao = extrair_tabela_mhtml(uploaded_cot)
+    except Exception as e:
+        st.error(f"Erro ao ler arquivo: {e}")
+        cotacao = pd.DataFrame()
+    bar.empty()
 
 df_final = pd.DataFrame()
 
@@ -631,12 +640,20 @@ else:
                 encontrou = False
                 for col_idx in h_row.index:
                     val_celula = str(h_row[col_idx])
-                    if cod_limpo in padronizar_codigo_10_digitos(val_celula) and cod_limpo != '0000000000':
+                    if cod_limpo in padronizar_codigo_10_digitos(val_celula) && codigo_busca != '0000000000': # ajustado condicional
+                        pass
+                # varredura correta por linha
+                for col_idx in h_row.index:
+                    if cod_limpo in padronizar_codigo_10_digitos(str(h_row[col_idx])) and cod_limpo != '0000000000':
                         encontrou = True
                         break
+                        
                 if encontrou:
                     forn_val = "Não identificado"
                     preco_val = 0.0
+                    
+                    # Coluna C (Numero do Pedido) = Índice 2
+                    num_pedido = str(h_row.get(2, "N/D"))
                     
                     # Coluna M (Data Emissão) = Índice 12
                     data_raw = str(h_row.get(12, ""))
@@ -668,7 +685,8 @@ else:
                         pass
                         
                     compras_encontradas.append({
-                        'Data Emissao PC': data_val,
+                        'Nº do Pedido': num_pedido,
+                        'Data Emissao': data_val,
                         'Fornecedor da Compra': forn_val,
                         'Prc Unitario': formatar_brl(preco_val) if preco_val > 0 else "R$ 0,00"
                     })
