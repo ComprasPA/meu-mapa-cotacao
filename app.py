@@ -16,7 +16,7 @@ st.set_page_config(
     layout="wide"
 )
 
-# Estilização visual corporativa estilo Dados Bancários
+# Estilização visual corporativa estilo Dados Bancários e ocultação da barra superior do Streamlit
 st.markdown("""
     <style>
     .main { background-color: #ffffff; }
@@ -25,6 +25,11 @@ st.markdown("""
     .block-container {
         padding-top: 1rem !important;
     }
+
+    /* Oculta completamente a barra superior padrão do Streamlit (Share, GitHub, Menu, etc.) */
+    header { visibility: hidden !important; }
+    #MainMenu { visibility: hidden !important; }
+    footer { visibility: hidden !important; }
 
     /* Cabeçalho alinhado com status à direita */
     .status-badge {
@@ -189,7 +194,7 @@ def formatar_pct(valor):
     try:
         val_float = float(valor)
     except:
-        return ""
+        val_float = ""
     return f"{val_float:+,.2f}%".replace(',', 'X').replace('.', ',').replace('X', '.')
 
 def formatar_pct_com_seta(valor):
@@ -669,7 +674,7 @@ else:
     st.subheader("🔍 Observações Logísticas e Fiscais (ZFM)")
     st.markdown("""
     * **Impacto Logístico:** Avaliação do custo total de frete (modal aéreo/fluvial) para suprimentos oriundos de 'Fora do Estado' em comparação com fornecedores locais de Manaus.
-    * **Incentivos Fiscais:** Validação da aplicação correta dos benefícios tributários da Zona Franca de Manaus (ZFM) para preservação de margem.
+    * **Incentivos Fiscais:** Validar a aplicação correta dos benefícios tributários da Zona Franca de Manaus (ZFM) para preservação de margem.
     * **Picos Fora da Curva:** Análise crítica obrigatória em variações superiores a +5%, verificando oscilações de matéria-prima e custos logísticos antes da emissão da O.C.
     """)
 
