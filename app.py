@@ -668,7 +668,7 @@ else:
                         pass
                         
                     compras_encontradas.append({
-                        'Data Emissao': data_val,
+                        'Data Emissao PC': data_val,
                         'Fornecedor da Compra': forn_val,
                         'Prc Unitario': formatar_brl(preco_val) if preco_val > 0 else "R$ 0,00"
                     })
