@@ -613,7 +613,7 @@ else:
         key="btn_pdf_top"
     )
 
-    # Bloco de Pesquisa por Código do Item posicionado abaixo do mapa com Gráfico de Linha configurado
+    # Bloco de Pesquisa por Código do Item posicionado abaixo do mapa com Gráfico de Linha corrigido (Data Emissao vs Prc Unitario)
     st.markdown("---")
     st.subheader("🔍 Consulta de Histórico por Código do Item")
     
@@ -637,7 +637,9 @@ else:
                 if encontrou:
                     forn_val = "Não identificado"
                     preco_val = 0.0
-                    data_val = str(h_row.get(0, "Data N/D")) # Assumindo coluna 0 como data de emissão
+                    
+                    # Ajustado para buscar a Data de Emissão real (geralmente na coluna 1 ou 2 do histórico, ajustável se necessário)
+                    data_val = str(h_row.get(1, h_row.get(0, "Data N/D"))) 
                     
                     try:
                         f_col = str(h_row.get(4, ""))
@@ -646,7 +648,7 @@ else:
                         else:
                             for val in h_row.values:
                                 t = str(val)
-                                if len(t) > 5 and not any(char.isdigit() for char in t[:3]) and t.lower() not in ['a vista', '25 dias']:
+                                if len(t) > 5 and not any(char.isdigit() for char in t[:3]) and t.lower() not in ['a vista', '25 dias', '30 dias']:
                                     forn_val = t
                                     break
                     except:
@@ -679,7 +681,7 @@ else:
             df_historico_item = pd.DataFrame(compras_encontradas)
             st.table(df_historico_item)
 
-            # GRÁFICO DE LINHA COM EIXOS X ("Data Emissao") E Y ("Prc Unitario")
+            # GRÁFICO DE LINHA COM EIXOS X ("Data Emissao") E Y ("Prc Unitario") EXATOS
             if dados_grafico:
                 st.markdown("#### 📈 Evolução do Preço Histórico")
                 df_chart = pd.DataFrame(dados_grafico)
