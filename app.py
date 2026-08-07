@@ -9,6 +9,7 @@ import email
 from bs4 import BeautifulSoup
 import datetime
 import time
+import plotly.express as px  # Importando Plotly para gráficos suavizados de curva
 
 # Configuração da Página
 st.set_page_config(
@@ -695,14 +696,41 @@ else:
             df_historico_item = pd.DataFrame(compras_encontradas)
             st.table(df_historico_item)
 
-            # GRÁFICO DE LINHA COM EIXOS X ("Data Emissao" formatada BR) E Y ("Prc Unitario") ORDENADOS CRONOLOGICAMENTE
+            # GRÁFICO DE LINHA SUAVIZADA (CURVA) COM ÁREA SOMBREADA USANDO PLOTLY
             if dados_grafico:
                 st.markdown("#### 📈 Evolução do Preço Histórico")
                 df_chart = pd.DataFrame(dados_grafico).sort_values("Data Emissao")
                 
-                df_chart_display = df_chart.copy()
-                df_chart_display["Data Emissao"] = df_chart_display["Data Emissao"].dt.strftime('%d/%m/%Y')
+                # Formata a data para string legível no eixo X do Plotly
+                df_chart["Data Formatada"] = df_chart["Data Emissao"].dt.strftime('%d/%m/%Y')
                 
-                st.line_chart(df_chart_display.set_index("Data Emissao")["Prc Unitario"])
+                # Criando o gráfico suavizado com Plotly (linha em curva 'spline' e preenchimento de área)
+                fig = px.line(
+                    df_chart, 
+                    x="Data Formatada", 
+                    y="Prc Unitario",
+                    markers=True,
+                    line_shape="spline" # Aplica o efeito de linha suavizada/curva exato da foto
+                )
+                
+                # Customizações visuais para combinar com o design escuro/elegante da referência
+                fig.update_traces(
+                    fill='tozeroy', # Preenche a área abaixo da curva
+                    line=dict(color='#00d2c4', width=3), # Cor verde/ciano da linha
+                    marker=dict(size=8, color='#00d2c4')
+                )
+                
+                fig.update_layout(
+                    xaxis_title="Data Emissao",
+                    yaxis_title="Prc Unitario",
+                    plot_bgcolor='rgba(0,0,0,0)',
+                    paper_bgcolor='rgba(0,0,0,0)',
+                    font=dict(color='white'),
+                    xaxis=dict(showgrid=False),
+                    yaxis=dict(showgrid=True, gridcolor='rgba(255,255,255,0.1)'),
+                    margin=dict(l=20, r=20, t=20, b=20)
+                )
+                
+                st.plotly_chart(fig, use_container_width=True)
         else:
             st.warning("⚠️ Nenhuma compra anterior encontrada no histórico para este código.")
