@@ -35,7 +35,7 @@ st.markdown("""
         border: 1px solid #d2e3fc;
     }
 
-    /* Ajuste idêntico ao modelo da imagem para o Expander */
+    /* Ajuste idêntico ao modelo para o Expander */
     div[data-testid="stExpander"] {
         border: none !important;
         background-color: transparent !important;
@@ -82,7 +82,7 @@ st.markdown("""
         font-size: 13px !important;
         text-align: right;
     }
-    .dataframe td:nth-child(9), .dataframe th:nth-child(9) {
+    .dataframe td:nth-child(10), .dataframe th:nth-child(10) {
         white-space: nowrap !important;
         text-align: center !important;
     }
@@ -92,7 +92,7 @@ st.markdown("""
     .dataframe tr:nth-child(odd) {
         background-color: #ffffff !important;
     }
-    .dataframe td:nth-child(1), .dataframe td:nth-child(2), .dataframe td:nth-child(3), .dataframe td:nth-child(6), .dataframe td:nth-child(8), .dataframe td:nth-child(10) {
+    .dataframe td:nth-child(1), .dataframe td:nth-child(2), .dataframe td:nth-child(3), .dataframe td:nth-child(6), .dataframe td:nth-child(8), .dataframe td:nth-child(11) {
         text-align: left;
     }
     </style>
@@ -120,7 +120,7 @@ def carregar_historico_github():
 
 historico, status_historico = carregar_historico_github()
 
-# Caixa Oculta (Abre / Fecha) com altura ajustada idêntica à referência
+# Caixa Oculta (Abre / Fecha) com altura ajustada
 with st.expander("⚙️ Abrir / Fechar Configurações (Upload e Data Base)", expanded=False):
     uploaded_cot = st.file_uploader(
         "Carregar Mapa de Cotação (.csv, .xlsx, .docx ou .mhtml)", 
@@ -373,16 +373,31 @@ else:
         item_contador += 1
 
         ultimo_preco = 0.0
+        preco_medio = 0.0
         forn_hist = ""
         tem_historico = False
         
         if not historico.empty:
             match_linhas = []
+            precos_encontrados = []
             for h_idx, h_row in historico.iterrows():
                 for col_idx in h_row.index:
                     val_celula = str(h_row[col_idx])
                     if padronizar_codigo_10_digitos(val_celula) == codigo_busca and codigo_busca != '0000000000':
                         match_linhas.append(h_row)
+                        # Tenta extrair preço desta ocorrência no histórico
+                        try:
+                            p_val = limpar_valor(h_row.get(10, 0))
+                            if p_val > 0:
+                                precos_encontrados.append(p_val)
+                            else:
+                                for val in h_row.values:
+                                    v = limpar_valor(val)
+                                    if v > 1.0 and v != qtd:
+                                        precos_encontrados.append(v)
+                                        break
+                        except:
+                            pass
                         break
                         
             if match_linhas:
@@ -400,6 +415,12 @@ else:
                                 break
                 except:
                     pass
+                
+                # Cálculo do Preço Médio: Soma dos preços dividida pela quantidade de compras (ocorrências)
+                if precos_encontrados:
+                    preco_medio = sum(precos_encontrados) / len(precos_encontrados)
+                elif ultimo_preco > 0:
+                    preco_medio = ultimo_preco
                     
                 try:
                     forn_col = str(ultima_ocorrencia.get(4, ""))
@@ -414,8 +435,8 @@ else:
                 except:
                     pass
             
-        if tem_historico and ultimo_preco > 0:
-            variacao = ((preco_novo - ultimo_preco) / ultimo_preco) * 100
+        if tem_historico and preco_medio > 0:
+            variacao = ((preco_novo - preco_medio) / preco_medio) * 100
             if variacao < 0:
                 tendencia = "Queda"
             elif variacao > 0:
@@ -424,6 +445,7 @@ else:
                 tendencia = "Estabilidade"
         else:
             ultimo_preco = ""
+            preco_medio = ""
             forn_hist = ""
             variacao = ""
             tendencia = "Sem Histórico"
@@ -437,6 +459,7 @@ else:
             'Fornecedor do Preço Novo': forn_novo,
             'Último Preço Hist. (R$)': ultimo_preco,
             'Fornecedor do Último Preço': forn_hist,
+            'Preço Médio (R$)': preco_medio,
             'Variação (Δ%)': variacao,
             'Tendência': tendencia
         })
@@ -449,8 +472,8 @@ else:
         colunas_exatas = [
             'Item', 'Código', 'Descrição Resumida', 'Qtd', 
             'Novo Preço Unit. (R$)', 'Fornecedor do Preço Novo',
-            'Último Preço Hist. (R$)', 'Fornecedor do Último Preço',  
-            'Variação (Δ%)', 'Tendência'
+            'Último Preço Hist. (R$)', 'Fornecedor do Último Preço',
+            'Preço Médio (R$)', 'Variação (Δ%)', 'Tendência'
         ]
 
         df_final = df_final[colunas_exatas]
@@ -459,6 +482,7 @@ else:
         df_display['Qtd'] = df_display['Qtd'].apply(formatar_qtd)
         df_display['Novo Preço Unit. (R$)'] = df_display['Novo Preço Unit. (R$)'].apply(formatar_brl)
         df_display['Último Preço Hist. (R$)'] = df_display['Último Preço Hist. (R$)'].apply(formatar_brl)
+        df_display['Preço Médio (R$)'] = df_display['Preço Médio (R$)'].apply(formatar_brl)
         df_display['Variação (Δ%)'] = df_final['Variação (Δ%)'].apply(formatar_pct_com_seta)
 
         # Exibição do painel interativo formatado com classe CSS 'dataframe' (Estilo Dados Bancários)
@@ -495,27 +519,28 @@ else:
                 data_hora = datetime.datetime.now().strftime("%d/%m/%Y %H:%M")
                 self.cell(0, 8, limpar_texto_pdf(f"Gerado em {data_hora} | Pagina {self.page_no()}"), 0, 0, "C")
 
-        # Função para Gerar PDF do Relatório com colunas somando exatamente 284mm
+        # Função para Gerar PDF do Relatório com colunas ajustadas para 11 colunas somando exatamente 284mm
         def gerar_pdf(df):
             pdf = PDFProfissional()
             pdf.add_page()
             
-            col_widths = [10, 22, 60, 10, 20, 50, 20, 50, 22, 20]
+            # Larguras ajustadas para 11 colunas cabendo perfeitamente nos 284mm úteis
+            col_widths = [9, 20, 52, 9, 18, 40, 18, 40, 18, 20, 20]
             headers = [
                 "Item", "Codigo", "Descricao", "Qtd", 
                 "Novo Preco", "Forn. Novo", "Ult. Preco", 
-                "Forn. Ant.", "Var(%)", "Tendencia"
+                "Forn. Ant.", "Preco Med.", "Var(%)", "Tendencia"
             ]
             
             pdf.set_fill_color(47, 85, 151)
             pdf.set_text_color(255, 255, 255)
-            pdf.set_font("helvetica", "B", 8)
+            pdf.set_font("helvetica", "B", 7)
             
             for i, h in enumerate(headers):
                 pdf.cell(col_widths[i], 7, limpar_texto_pdf(h), border=1, fill=True, align="C")
             pdf.ln()
             
-            pdf.set_font("helvetica", "", 7)
+            pdf.set_font("helvetica", "", 6.5)
             
             fill = False
             for _, row in df.iterrows():
@@ -531,16 +556,21 @@ else:
                 ult_preco_val = row['Último Preço Hist. (R$)']
                 ult_preco_str = formatar_brl(ult_preco_val) if ult_preco_val != "" else ""
                 forn_ant_str = str(row['Fornecedor do Último Preço']) if ult_preco_val != "" else ""
+                
+                preco_med_val = row['Preço Médio (R$)']
+                preco_med_str = formatar_brl(preco_med_val) if preco_med_val != "" else ""
+                
                 var_str = formatar_pct(var_val) if var_val != "" else ""
                 
                 pdf.cell(col_widths[0], 6, limpar_texto_pdf(str(row['Item'])), border=1, fill=fill, align="C")
                 pdf.cell(col_widths[1], 6, limpar_texto_pdf(str(row['Código'])), border=1, fill=fill, align="C")
-                pdf.cell(col_widths[2], 6, limpar_texto_pdf(str(row['Descrição Resumida'])[:40]), border=1, fill=fill, align="L")
+                pdf.cell(col_widths[2], 6, limpar_texto_pdf(str(row['Descrição Resumida'])[:35]), border=1, fill=fill, align="L")
                 pdf.cell(col_widths[3], 6, limpar_texto_pdf(str(row['Qtd'])), border=1, fill=fill, align="C")
                 pdf.cell(col_widths[4], 6, limpar_texto_pdf(formatar_brl(row['Novo Preço Unit. (R$)'])), border=1, fill=fill, align="R")
-                pdf.cell(col_widths[5], 6, limpar_texto_pdf(str(row['Fornecedor do Preço Novo'])[:28]), border=1, fill=fill, align="L")
+                pdf.cell(col_widths[5], 6, limpar_texto_pdf(str(row['Fornecedor do Preço Novo'])[:22]), border=1, fill=fill, align="L")
                 pdf.cell(col_widths[6], 6, limpar_texto_pdf(ult_preco_str), border=1, fill=fill, align="R")
-                pdf.cell(col_widths[7], 6, limpar_texto_pdf(forn_ant_str[:28]), border=1, fill=fill, align="L")
+                pdf.cell(col_widths[7], 6, limpar_texto_pdf(forn_ant_str[:22]), border=1, fill=fill, align="L")
+                pdf.cell(col_widths[8], 6, limpar_texto_pdf(preco_med_str), border=1, fill=fill, align="R")
                 
                 if var_val != "":
                     if var_val < 0:
@@ -550,8 +580,8 @@ else:
                     else:
                         pdf.set_text_color(0, 0, 0)
                 
-                pdf.cell(col_widths[8], 6, limpar_texto_pdf(var_str), border=1, fill=fill, align="R")
-                pdf.cell(col_widths[9], 6, limpar_texto_pdf(tendencia), border=1, fill=fill, align="C")
+                pdf.cell(col_widths[9], 6, limpar_texto_pdf(var_str), border=1, fill=fill, align="R")
+                pdf.cell(col_widths[10], 6, limpar_texto_pdf(tendencia), border=1, fill=fill, align="C")
                 
                 pdf.ln()
                 fill = not fill
@@ -577,7 +607,7 @@ else:
         st.markdown("---")
         st.subheader("🔍 Observações Logísticas e Fiscais (ZFM)")
         st.markdown("""
-        * **Impacto Logístico:** Avaliação do custo total de frete (modal aéreo/fluvial) para suprimentos oriundos de 'Fora do Estado' em comparação com fornecedores locais de Manaus.
+        * **Impacto Logístico:** Avaliação do custo total de frete (modal aéreo/fluvial) para suprimentos oriundos de 'Fora do Estado' em comparación com fornecedores locais de Manaus.
         * **Incentivos Fiscais:** Validação da aplicação correta dos benefícios tributários da Zona Franca de Manaus (ZFM) para preservação de margem.
         * **Picos Fora da Curva:** Análise crítica obrigatória em variações superiores a +5%, verificando oscilações de matéria-prima e custos logísticos antes da emissão da O.C.
         """)
