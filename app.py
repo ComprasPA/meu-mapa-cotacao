@@ -640,7 +640,7 @@ else:
                 encontrou = False
                 for col_idx in h_row.index:
                     val_celula = str(h_row[col_idx])
-                    if cod_limpo in padronizar_codigo_10_digitos(val_celula) and cod_limpo != '0000000000':
+                    if cod_limpo in padronizar_codigo_10_digitos(val_celula) and codigo_busca != '0000000000':
                         encontrou = True
                         break
                 
