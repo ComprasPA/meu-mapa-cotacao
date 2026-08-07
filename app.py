@@ -613,7 +613,7 @@ else:
         key="btn_pdf_top"
     )
 
-    # Bloco de Pesquisa por Código do Item posicionado abaixo do mapa com Gráfico de Linha corrigido (Data Emissao vs Prc Unitario)
+    # Bloco de Pesquisa por Código do Item posicionado abaixo do mapa com Gráfico ajustado (Coluna M = Data Emissao, Coluna K = Prc Unitario)
     st.markdown("---")
     st.subheader("🔍 Consulta de Histórico por Código do Item")
     
@@ -638,8 +638,8 @@ else:
                     forn_val = "Não identificado"
                     preco_val = 0.0
                     
-                    # Ajustado para buscar a Data de Emissão real (geralmente na coluna 1 ou 2 do histórico, ajustável se necessário)
-                    data_val = str(h_row.get(1, h_row.get(0, "Data N/D"))) 
+                    # Coluna M (Data Emissão) = Índice 12
+                    data_val = str(h_row.get(12, "Data N/D"))
                     
                     try:
                         f_col = str(h_row.get(4, ""))
@@ -654,16 +654,11 @@ else:
                     except:
                         pass
                         
+                    # Coluna K (Preço Unitário) = Índice 10
                     try:
                         p_col = limpar_valor(h_row.get(10, 0))
                         if p_col > 0:
                             preco_val = p_col
-                        else:
-                            for val in h_row.values:
-                                v = limpar_valor(val)
-                                if v > 1.0:
-                                    preco_val = v
-                                    break
                     except:
                         pass
                         
@@ -681,7 +676,7 @@ else:
             df_historico_item = pd.DataFrame(compras_encontradas)
             st.table(df_historico_item)
 
-            # GRÁFICO DE LINHA COM EIXOS X ("Data Emissao") E Y ("Prc Unitario") EXATOS
+            # GRÁFICO DE LINHA COM EIXOS X ("Data Emissao" / Coluna M) E Y ("Prc Unitario" / Coluna K)
             if dados_grafico:
                 st.markdown("#### 📈 Evolução do Preço Histórico")
                 df_chart = pd.DataFrame(dados_grafico)
