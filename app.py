@@ -639,7 +639,12 @@ else:
                     preco_val = 0.0
                     
                     # Coluna M (Data Emissão) = Índice 12
-                    data_val = str(h_row.get(12, "Data N/D"))
+                    data_raw = str(h_row.get(12, ""))
+                    try:
+                        data_dt = pd.to_datetime(data_raw, dayfirst=True)
+                        data_val = data_dt.strftime('%d/%m/%Y')
+                    except:
+                        data_val = data_raw
                     
                     try:
                         f_col = str(h_row.get(4, ""))
@@ -668,18 +673,22 @@ else:
                         'Prc Unitario': formatar_brl(preco_val) if preco_val > 0 else "R$ 0,00"
                     })
                     
-                    if preco_val > 0:
-                        dados_grafico.append({"Data Emissao": data_val, "Prc Unitario": preco_val})
+                    if preco_val > 0 and pd.notna(pd.to_datetime(data_raw, dayfirst=True, errors='coerce')):
+                        dados_grafico.append({"Data Emissao": pd.to_datetime(data_raw, dayfirst=True), "Prc Unitario": preco_val})
 
         if compras_encontradas:
             st.success(f"Foram encontradas **{len(compras_encontradas)}** ocorrência(s) de compra para o código pesquisado:")
             df_historico_item = pd.DataFrame(compras_encontradas)
             st.table(df_historico_item)
 
-            # GRÁFICO DE LINHA COM EIXOS X ("Data Emissao" / Coluna M) E Y ("Prc Unitario" / Coluna K)
+            # GRÁFICO DE LINHA COM EIXOS X ("Data Emissao" formatada BR) E Y ("Prc Unitario") ORDENADOS CRONOLOGICAMENTE
             if dados_grafico:
                 st.markdown("#### 📈 Evolução do Preço Histórico")
-                df_chart = pd.DataFrame(dados_grafico)
-                st.line_chart(df_chart, x="Data Emissao", y="Prc Unitario")
+                df_chart = pd.DataFrame(dados_grafico).sort_values("Data Emissao")
+                
+                df_chart_display = df_chart.copy()
+                df_chart_display["Data Emissao"] = df_chart_display["Data Emissao"].dt.strftime('%d/%m/%Y')
+                
+                st.line_chart(df_chart_display.set_index("Data Emissao")["Prc Unitario"])
         else:
             st.warning("⚠️ Nenhuma compra anterior encontrada no histórico para este código.")
