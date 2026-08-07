@@ -640,19 +640,15 @@ else:
                 encontrou = False
                 for col_idx in h_row.index:
                     val_celula = str(h_row[col_idx])
-                    if cod_limpo in padronizar_codigo_10_digitos(val_celula) && codigo_busca != '0000000000': # ajustado condicional
-                        pass
-                # varredura correta por linha
-                for col_idx in h_row.index:
-                    if cod_limpo in padronizar_codigo_10_digitos(str(h_row[col_idx])) and cod_limpo != '0000000000':
+                    if cod_limpo in padronizar_codigo_10_digitos(val_celula) and codigo_busca != '0000000000':
                         encontrou = True
                         break
-                        
+                
                 if encontrou:
                     forn_val = "Não identificado"
                     preco_val = 0.0
                     
-                    # Coluna C (Numero do Pedido) = Índice 2
+                    # Coluna C (Número do Pedido) = Índice 2
                     num_pedido = str(h_row.get(2, "N/D"))
                     
                     # Coluna M (Data Emissão) = Índice 12
@@ -686,7 +682,7 @@ else:
                         
                     compras_encontradas.append({
                         'Nº do Pedido': num_pedido,
-                        'Data Emissao': data_val,
+                        'Data Emissao PC': data_val,
                         'Fornecedor da Compra': forn_val,
                         'Prc Unitario': formatar_brl(preco_val) if preco_val > 0 else "R$ 0,00"
                     })
