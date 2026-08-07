@@ -416,9 +416,9 @@ if uploaded_cot is not None:
 else:
     cotacao = pd.DataFrame()
 
-if cotacao.empty:
-    st.info("👆 Clique no botão **⚙️ Abrir / Fechar Configurações** acima e faça o upload do seu Mapa de Cotação (.csv, .xlsx, .docx ou .mhtml) para iniciar a análise.")
-else:
+df_final = pd.DataFrame()
+
+if not cotacao.empty:
     cotacao.columns = [str(c).strip() for c in cotacao.columns]
 
     def achar_coluna(df, termos):
@@ -559,7 +559,11 @@ else:
 
     df_final = pd.DataFrame(resultados)
 
-if not df_final.empty:
+if cotacao.empty:
+    st.info("👆 Clique no botão **⚙️ Abrir / Fechar Configurações** acima e faça o upload do seu Mapa de Cotação (.csv, .xlsx, .docx ou .mhtml) para iniciar a análise.")
+elif df_final.empty:
+    st.warning("⚠️ Nenhum item válido encontrado. Verifique o arquivo carregado.")
+else:
     colunas_exatas = [
         'Item', 'Código', 'Descrição Resumida', 'Qtd', 
         'Novo Preço Unit. (R$)', 'Fornecedor do Preço Novo',
