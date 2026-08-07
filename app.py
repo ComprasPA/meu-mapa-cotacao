@@ -16,7 +16,7 @@ st.set_page_config(
     layout="wide"
 )
 
-# Estilização visual corporativa, ocultação dos botões do Streamlit e anulação do pop-up de cache
+# Estilização visual corporativa estilo Dados Bancários e ocultação de elementos padrão
 st.markdown("""
     <style>
     .main { background-color: #ffffff; }
@@ -613,7 +613,7 @@ else:
         key="btn_pdf_top"
     )
 
-    # Bloco de Pesquisa por Código do Item posicionado abaixo do mapa com Gráfico de Linha da Evolução de Preços
+    # Bloco de Pesquisa por Código do Item posicionado abaixo do mapa com Gráfico de Linha (Datas no Eixo X)
     st.markdown("---")
     st.subheader("🔍 Consulta de Histórico por Código do Item")
     
@@ -624,7 +624,7 @@ else:
     if codigo_pesquisa:
         cod_limpo = padronizar_codigo_10_digitos(codigo_pesquisa)
         compras_encontradas = []
-        precos_historicos_grafico = []
+        dados_grafico = []
         
         if not historico.empty:
             for h_idx, h_row in historico.iterrows():
@@ -637,6 +637,8 @@ else:
                 if encontrou:
                     forn_val = "Não identificado"
                     preco_val = 0.0
+                    data_val = str(h_row.get(0, "Data N/D")) # Assumindo coluna 0 como data
+                    
                     try:
                         f_col = str(h_row.get(4, ""))
                         if len(f_col) > 3 and f_col.lower() not in ['nan', 'a vista', '25 dias']:
@@ -664,24 +666,23 @@ else:
                         pass
                         
                     compras_encontradas.append({
+                        'Data': data_val,
                         'Fornecedor da Compra': forn_val,
                         'Preço Praticado (R$)': formatar_brl(preco_val) if preco_val > 0 else "R$ 0,00"
                     })
+                    
                     if preco_val > 0:
-                        precos_historicos_grafico.append(preco_val)
+                        dados_grafico.append({"Data": data_val, "Preço": preco_val})
 
         if compras_encontradas:
             st.success(f"Foram encontradas **{len(compras_encontradas)}** ocorrência(s) de compra para o código pesquisado:")
             df_historico_item = pd.DataFrame(compras_encontradas)
             st.table(df_historico_item)
 
-            # GRÁFICO DE LINHA DA EVOLUÇÃO DE PREÇOS
-            if precos_historicos_grafico:
-                st.markdown("#### 📈 Evolução do Preço Histórico do Item")
-                df_chart = pd.DataFrame({
-                    "Ocorrência de Compra": [f"Compra {i+1}" for i in range(len(precos_historicos_grafico))],
-                    "Preço Unitário (R$)": precos_historicos_grafico
-                }).set_index("Ocorrência de Compra")
-                st.line_chart(df_chart)
+            # GRÁFICO DE LINHA COM AS DATAS NO EIXO X
+            if dados_grafico:
+                st.markdown("#### 📈 Evolução do Preço Histórico (com Datas)")
+                df_chart = pd.DataFrame(dados_grafico)
+                st.line_chart(df_chart.set_index("Data")["Preço"])
         else:
             st.warning("⚠️ Nenhuma compra anterior encontrada no histórico para este código.")
