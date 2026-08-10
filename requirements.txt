@@ -1,7 +1,7 @@
 streamlit
 pandas
 numpy
-docx
+python-docx
 fpdf2
 beautifulsoup4
 openpyxl
