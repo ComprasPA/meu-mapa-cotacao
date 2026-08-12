@@ -118,7 +118,7 @@ st.markdown("""
     .dataframe tr:nth-child(odd) {
         background-color: #ffffff !important;
     }
-    .dataframe td:nth-child(1), .dataframe td:nth-child(2), .dataframe td:nth-child(3), .dataframe td:nth-child(6), .dataframe td:nth-child(8), .dataframe td:nth-child(12) {
+    .dataframe td:nth-child(1), .dataframe td:nth-child(2), .dataframe td:nth-child(3), .dataframe td:nth-child(6), .dataframe td:nth-child(8) {
         text-align: left;
     }
     </style>
@@ -338,7 +338,7 @@ def extrair_tabela_docx_limpa(arquivo_docx):
         st.error(f"Erro ao processar o documento Word: {e}")
     return pd.DataFrame()
 
-# Função para Gerar PDF do Relatório ajustada com 12 colunas incluindo o Menor Valor Histórico
+# Função para Gerar PDF do Relatório (Menor Valor agora é a última coluna)
 def gerar_pdf(df):
     class PDFProfissional(FPDF):
         def __init__(self):
@@ -370,11 +370,12 @@ def gerar_pdf(df):
     pdf = PDFProfissional()
     pdf.add_page()
     
-    col_widths = [8, 18, 48, 8, 17, 36, 17, 36, 17, 20, 21, 21]
+    # Ajuste de larguras para comportar a nova ordem das colunas
+    col_widths = [8, 18, 48, 8, 17, 36, 17, 36, 17, 18, 20, 22]
     headers = [
         "Item", "Codigo", "Descricao", "Qtd", 
         "Novo Preco", "Forn. Novo", "Ult. Preco", 
-        "Forn. Ant.", "Preco Med.", "Menor Valor", "Var(%)", "Tendencia"
+        "Forn. Ant.", "Preco Med.", "Var(%)", "Tendencia", "Menor Valor"
     ]
     
     pdf.set_fill_color(47, 85, 151)
@@ -419,7 +420,6 @@ def gerar_pdf(df):
         pdf.cell(col_widths[6], 6, limpar_texto_pdf(ult_preco_str), border=1, fill=fill, align="R")
         pdf.cell(col_widths[7], 6, limpar_texto_pdf(forn_ant_str[:20]), border=1, fill=fill, align="L")
         pdf.cell(col_widths[8], 6, limpar_texto_pdf(preco_med_str), border=1, fill=fill, align="R")
-        pdf.cell(col_widths[9], 6, limpar_texto_pdf(menor_str), border=1, fill=fill, align="R")
         
         if var_val != "":
             if var_val < 0:
@@ -429,8 +429,12 @@ def gerar_pdf(df):
             else:
                 pdf.set_text_color(0, 0, 0)
         
-        pdf.cell(col_widths[10], 6, limpar_texto_pdf(var_str), border=1, fill=fill, align="R")
-        pdf.cell(col_widths[11], 6, limpar_texto_pdf(tendencia), border=1, fill=fill, align="C")
+        pdf.cell(col_widths[9], 6, limpar_texto_pdf(var_str), border=1, fill=fill, align="R")
+        
+        # Reseta cor para os textos seguintes
+        pdf.set_text_color(0, 0, 0)
+        pdf.cell(col_widths[10], 6, limpar_texto_pdf(tendencia), border=1, fill=fill, align="C")
+        pdf.cell(col_widths[11], 6, limpar_texto_pdf(menor_str), border=1, fill=fill, align="R")
         
         pdf.ln()
         fill = not fill
@@ -622,11 +626,12 @@ if not cotacao.empty:
     df_final = pd.DataFrame(resultados)
 
 if not df_final.empty:
+    # Ajuste: A ordem das colunas coloca o 'Menor Valor Hist. (R$)' no final
     colunas_exatas = [
         'Item', 'Código', 'Descrição Resumida', 'Qtd', 
         'Novo Preço Unit. (R$)', 'Fornecedor do Preço Novo',
         'Último Preço Hist. (R$)', 'Fornecedor do Último Preço',
-        'Preço Médio (R$)', 'Menor Valor Hist. (R$)', 'Variação (Δ%)', 'Tendência'
+        'Preço Médio (R$)', 'Variação (Δ%)', 'Tendência', 'Menor Valor Hist. (R$)'
     ]
 
     df_final = df_final[colunas_exatas]
@@ -705,7 +710,7 @@ if codigo_pesquisa:
                     else:
                         for val in h_row.values:
                             t = str(val)
-                            if len(t) > 5 and not any(char.isdigit() for char in t[:3]) and t.lower() not in ['a vista', '25 dias']:
+                            if len(t) > 5 and not any(char.isdigit() for char in t[:3]) and t.lower() not in ['a vista', '25 dias', '30 dias']:
                                 forn_val = t
                                 break
                 except:
@@ -779,4 +784,5 @@ if codigo_pesquisa:
             
             st.plotly_chart(fig, use_container_width=True)
     else:
-        st.warning("⚠️ Nenhuma compra anterior encontrada no histórico para este código.")
+        if codigo_pesquisa:
+            st.warning("⚠️ Nenhuma compra anterior encontrada no histórico para este código.")
