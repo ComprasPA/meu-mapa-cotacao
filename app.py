@@ -754,9 +754,10 @@ if codigo_pesquisa:
                 fill='tozeroy',
                 line=dict(color='#00d2c4', width=3),
                 marker=dict(size=8, color='#00d2c4'),
-                textposition="top center"
+                textposition="top center" # Garante o posicionamento ideal sem ocultar pontos
             )
             
+            # Ajustando a margem superior (t=50) para que os preços do topo não fiquem cortados
             fig.update_layout(
                 xaxis_title="Data Emissao",
                 yaxis_title="",
@@ -770,7 +771,7 @@ if codigo_pesquisa:
                     showticklabels=False,
                     dtick=0.50
                 ),
-                margin=dict(l=20, r=20, t=30, b=20)
+                margin=dict(l=20, r=20, t=50, b=20) # Margem superior expandida para caber todos os textos
             )
             
             st.plotly_chart(fig, use_container_width=True)
