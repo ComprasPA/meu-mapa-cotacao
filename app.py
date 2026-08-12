@@ -108,7 +108,7 @@ st.markdown("""
         font-size: 13px !important;
         text-align: right;
     }
-    .dataframe td:nth-child(10), .dataframe th:nth-child(10) {
+    .dataframe td:nth-child(11), .dataframe th:nth-child(11) {
         white-space: nowrap !important;
         text-align: center !important;
     }
@@ -118,7 +118,7 @@ st.markdown("""
     .dataframe tr:nth-child(odd) {
         background-color: #ffffff !important;
     }
-    .dataframe td:nth-child(1), .dataframe td:nth-child(2), .dataframe td:nth-child(3), .dataframe td:nth-child(6), .dataframe td:nth-child(8), .dataframe td:nth-child(11) {
+    .dataframe td:nth-child(1), .dataframe td:nth-child(2), .dataframe td:nth-child(3), .dataframe td:nth-child(6), .dataframe td:nth-child(8), .dataframe td:nth-child(12) {
         text-align: left;
     }
     </style>
@@ -149,7 +149,7 @@ def carregar_historico_github():
 historico, status_historico = carregar_historico_github()
 
 # ==============================================================================
-# CAIXA DE CONFIGURAÇÕES E UPLOAD AGORA POSICIONADAS NO TOPO ABSOLUTO
+# CAIXA DE CONFIGURAÇÕES E UPLOAD NO TOPO ABSOLUTO
 # ==============================================================================
 with st.expander("⚙️ Abrir / Fechar Configurações (Upload e Exportação PDF)", expanded=False):
     col_exp1, col_exp2 = st.columns([2, 1])
@@ -163,7 +163,7 @@ with st.expander("⚙️ Abrir / Fechar Configurações (Upload e Exportação P
         st.markdown("### 📥 Exportar Relatório")
         placeholder_pdf = st.empty()
 
-# Topo do App: Título e Status no canto superior direito (Movidos para baixo das Configurações)
+# Topo do App: Título e Status no canto superior direito
 col_title, col_status = st.columns([7, 3])
 with col_title:
     st.title("📊 Gestão Estratégica de Compras | Mapa de Cotação")
@@ -338,26 +338,26 @@ def extrair_tabela_docx_limpa(arquivo_docx):
         st.error(f"Erro ao processar o documento Word: {e}")
     return pd.DataFrame()
 
-# Função para Gerar PDF do Relatório com colunas ajustadas para 11 colunas somando exatamente 284mm
+# Função para Gerar PDF do Relatório ajustada com 12 colunas incluindo o Menor Valor Histórico
 def gerar_pdf(df):
     class PDFProfissional(FPDF):
         def __init__(self):
             super().__init__(orientation='L', unit='mm', format='A4')
-            self.set_margins(left=6.4, top=19.1, right=6.4)
+            self.set_margins(left=5.0, top=19.1, right=5.0)
             self.set_auto_page_break(auto=True, margin=19.1)
 
         def header(self):
             self.set_fill_color(47, 85, 151)
-            self.rect(6.4, 8, 284.2, 20, 'F')
+            self.rect(5.0, 8, 287.0, 20, 'F')
             
             self.set_font("helvetica", "B", 14)
             self.set_text_color(255, 255, 255)
-            self.set_xy(6.4, 10)
-            self.cell(284.2, 6, limpar_texto_pdf("Mapa de Cotacao & Comparativo Historico"), 0, 1, "C")
+            self.set_xy(5.0, 10)
+            self.cell(287.0, 6, limpar_texto_pdf("Mapa de Cotacao & Comparativo Historico"), 0, 1, "C")
             
             self.set_font("helvetica", "", 9)
-            self.set_xy(6.4, 16)
-            self.cell(284.2, 5, limpar_texto_pdf("Gestao Estratégica de Compras | Parente Andrade"), 0, 1, "C")
+            self.set_xy(5.0, 16)
+            self.cell(287.0, 5, limpar_texto_pdf("Gestao Estratégica de Compras | Parente Andrade"), 0, 1, "C")
             self.ln(10)
 
         def footer(self):
@@ -370,22 +370,22 @@ def gerar_pdf(df):
     pdf = PDFProfissional()
     pdf.add_page()
     
-    col_widths = [9, 20, 52, 9, 18, 40, 18, 40, 18, 20, 20]
+    col_widths = [8, 18, 48, 8, 17, 36, 17, 36, 17, 20, 21, 21]
     headers = [
         "Item", "Codigo", "Descricao", "Qtd", 
         "Novo Preco", "Forn. Novo", "Ult. Preco", 
-        "Forn. Ant.", "Preco Med.", "Var(%)", "Tendencia"
+        "Forn. Ant.", "Preco Med.", "Menor Valor", "Var(%)", "Tendencia"
     ]
     
     pdf.set_fill_color(47, 85, 151)
     pdf.set_text_color(255, 255, 255)
-    pdf.set_font("helvetica", "B", 7)
+    pdf.set_font("helvetica", "B", 6.5)
     
     for i, h in enumerate(headers):
         pdf.cell(col_widths[i], 7, limpar_texto_pdf(h), border=1, fill=True, align="C")
     pdf.ln()
     
-    pdf.set_font("helvetica", "", 6.5)
+    pdf.set_font("helvetica", "", 6.0)
     
     fill = False
     for _, row in df.iterrows():
@@ -405,17 +405,21 @@ def gerar_pdf(df):
         preco_med_val = row['Preço Médio (R$)']
         preco_med_str = formatar_brl(preco_med_val) if preco_med_val != "" else ""
         
+        menor_val = row['Menor Valor Hist. (R$)']
+        menor_str = formatar_brl(menor_val) if menor_val != "" else ""
+        
         var_str = formatar_pct(var_val) if var_val != "" else ""
         
         pdf.cell(col_widths[0], 6, limpar_texto_pdf(str(row['Item'])), border=1, fill=fill, align="C")
         pdf.cell(col_widths[1], 6, limpar_texto_pdf(str(row['Código'])), border=1, fill=fill, align="C")
-        pdf.cell(col_widths[2], 6, limpar_texto_pdf(str(row['Descrição Resumida'])[:35]), border=1, fill=fill, align="L")
+        pdf.cell(col_widths[2], 6, limpar_texto_pdf(str(row['Descrição Resumida'])[:32]), border=1, fill=fill, align="L")
         pdf.cell(col_widths[3], 6, limpar_texto_pdf(str(row['Qtd'])), border=1, fill=fill, align="C")
         pdf.cell(col_widths[4], 6, limpar_texto_pdf(formatar_brl(row['Novo Preço Unit. (R$)'])), border=1, fill=fill, align="R")
-        pdf.cell(col_widths[5], 6, limpar_texto_pdf(str(row['Fornecedor do Preço Novo'])[:22]), border=1, fill=fill, align="L")
+        pdf.cell(col_widths[5], 6, limpar_texto_pdf(str(row['Fornecedor do Preço Novo'])[:20]), border=1, fill=fill, align="L")
         pdf.cell(col_widths[6], 6, limpar_texto_pdf(ult_preco_str), border=1, fill=fill, align="R")
-        pdf.cell(col_widths[7], 6, limpar_texto_pdf(forn_ant_str[:22]), border=1, fill=fill, align="L")
+        pdf.cell(col_widths[7], 6, limpar_texto_pdf(forn_ant_str[:20]), border=1, fill=fill, align="L")
         pdf.cell(col_widths[8], 6, limpar_texto_pdf(preco_med_str), border=1, fill=fill, align="R")
+        pdf.cell(col_widths[9], 6, limpar_texto_pdf(menor_str), border=1, fill=fill, align="R")
         
         if var_val != "":
             if var_val < 0:
@@ -425,8 +429,8 @@ def gerar_pdf(df):
             else:
                 pdf.set_text_color(0, 0, 0)
         
-        pdf.cell(col_widths[9], 6, limpar_texto_pdf(var_str), border=1, fill=fill, align="R")
-        pdf.cell(col_widths[10], 6, limpar_texto_pdf(tendencia), border=1, fill=fill, align="C")
+        pdf.cell(col_widths[10], 6, limpar_texto_pdf(var_str), border=1, fill=fill, align="R")
+        pdf.cell(col_widths[11], 6, limpar_texto_pdf(tendencia), border=1, fill=fill, align="C")
         
         pdf.ln()
         fill = not fill
@@ -589,6 +593,17 @@ if not cotacao.empty:
             variacao = ""
             tendencia = "Sem Histórico"
             
+        # Cálculo do menor valor entre o Último Preço Hist. e o Preço Médio
+        menor_valor = ""
+        if ultimo_preco != "" and preco_medio != "":
+            vals_validos = [v for v in [float(ultimo_preco), float(preco_medio)] if v > 0]
+            if vals_validos:
+                menor_valor = min(vals_validos)
+        elif ultimo_preco != "" and float(ultimo_preco) > 0:
+            menor_valor = float(ultimo_preco)
+        elif preco_medio != "" and float(preco_medio) > 0:
+            menor_valor = float(preco_medio)
+            
         resultados.append({
             'Item': num_item,
             'Código': codigo_original,
@@ -599,6 +614,7 @@ if not cotacao.empty:
             'Último Preço Hist. (R$)': ultimo_preco,
             'Fornecedor do Último Preço': forn_hist,
             'Preço Médio (R$)': preco_medio,
+            'Menor Valor Hist. (R$)': menor_valor,
             'Variação (Δ%)': variacao,
             'Tendência': tendencia
         })
@@ -610,7 +626,7 @@ if not df_final.empty:
         'Item', 'Código', 'Descrição Resumida', 'Qtd', 
         'Novo Preço Unit. (R$)', 'Fornecedor do Preço Novo',
         'Último Preço Hist. (R$)', 'Fornecedor do Último Preço',
-        'Preço Médio (R$)', 'Variação (Δ%)', 'Tendência'
+        'Preço Médio (R$)', 'Menor Valor Hist. (R$)', 'Variação (Δ%)', 'Tendência'
     ]
 
     df_final = df_final[colunas_exatas]
@@ -620,6 +636,7 @@ if not df_final.empty:
     df_display['Novo Preço Unit. (R$)'] = df_display['Novo Preço Unit. (R$)'].apply(formatar_brl)
     df_display['Último Preço Hist. (R$)'] = df_display['Último Preço Hist. (R$)'].apply(formatar_brl)
     df_display['Preço Médio (R$)'] = df_display['Preço Médio (R$)'].apply(formatar_brl)
+    df_display['Menor Valor Hist. (R$)'] = df_display['Menor Valor Hist. (R$)'].apply(formatar_brl)
     df_display['Variação (Δ%)'] = df_final['Variação (Δ%)'].apply(formatar_pct_com_seta)
 
     # Exibição do painel interativo formatado com classe CSS 'dataframe' (Estilo Dados Bancários)
