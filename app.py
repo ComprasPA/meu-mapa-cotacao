@@ -18,7 +18,7 @@ st.set_page_config(
     layout="wide"
 )
 
-# Estilização visual corporativa e congelamento da barra de pesquisa no rodapé
+# Estilização visual corporativa e congelamento da barra de pesquisa compacta no rodapé
 st.markdown("""
     <style>
     .main { background-color: #ffffff; }
@@ -72,7 +72,7 @@ st.markdown("""
         background-color: #ffffff !important;
     }
 
-    /* CONGELAR A SEÇÃO DE CONSULTA NO RODAPÉ DA TELA */
+    /* CONGELAR E REDUZIR A SEÇÃO DE CONSULTA NO RODAPÉ DA TELA */
     .footer-pesquisa {
         position: fixed;
         bottom: 0;
@@ -80,9 +80,14 @@ st.markdown("""
         width: 100%;
         background-color: #f8f9fa;
         border-top: 2px solid #2f5597;
-        padding: 10px 20px;
+        padding: 8px 20px;
         z-index: 99999;
         box-shadow: 0px -4px 10px rgba(0, 0, 0, 0.1);
+    }
+    
+    /* Limita a largura do campo de input para deixá-lo menor/compacto */
+    div[data-testid="stTextInput"] {
+        max-width: 400px !important;
     }
 
     /* Estilização da Tabela no Estilo Dados Bancários */
@@ -338,7 +343,7 @@ def extrair_tabela_docx_limpa(arquivo_docx):
         st.error(f"Erro ao processar o documento Word: {e}")
     return pd.DataFrame()
 
-# Função para Gerar PDF do Relatório (Menor Valor agora é a última coluna)
+# Função para Gerar PDF do Relatório
 def gerar_pdf(df):
     class PDFProfissional(FPDF):
         def __init__(self):
@@ -370,7 +375,6 @@ def gerar_pdf(df):
     pdf = PDFProfissional()
     pdf.add_page()
     
-    # Ajuste de larguras para comportar a nova ordem das colunas
     col_widths = [8, 18, 48, 8, 17, 36, 17, 36, 17, 18, 20, 22]
     headers = [
         "Item", "Codigo", "Descricao", "Qtd", 
@@ -431,7 +435,6 @@ def gerar_pdf(df):
         
         pdf.cell(col_widths[9], 6, limpar_texto_pdf(var_str), border=1, fill=fill, align="R")
         
-        # Reseta cor para os textos seguintes
         pdf.set_text_color(0, 0, 0)
         pdf.cell(col_widths[10], 6, limpar_texto_pdf(tendencia), border=1, fill=fill, align="C")
         pdf.cell(col_widths[11], 6, limpar_texto_pdf(menor_str), border=1, fill=fill, align="R")
@@ -597,7 +600,6 @@ if not cotacao.empty:
             variacao = ""
             tendencia = "Sem Histórico"
             
-        # Cálculo do menor valor entre o Último Preço Hist. e o Preço Médio
         menor_valor = ""
         if ultimo_preco != "" and preco_medio != "":
             vals_validos = [v for v in [float(ultimo_preco), float(preco_medio)] if v > 0]
@@ -618,15 +620,14 @@ if not cotacao.empty:
             'Último Preço Hist. (R$)': ultimo_preco,
             'Fornecedor do Último Preço': forn_hist,
             'Preço Médio (R$)': preco_medio,
-            'Menor Valor Hist. (R$)': menor_valor,
             'Variação (Δ%)': variacao,
-            'Tendência': tendencia
+            'Tendência': tendencia,
+            'Menor Valor Hist. (R$)': menor_valor
         })
 
     df_final = pd.DataFrame(resultados)
 
 if not df_final.empty:
-    # Ajuste: A ordem das colunas coloca o 'Menor Valor Hist. (R$)' no final
     colunas_exatas = [
         'Item', 'Código', 'Descrição Resumida', 'Qtd', 
         'Novo Preço Unit. (R$)', 'Fornecedor do Preço Novo',
@@ -644,13 +645,11 @@ if not df_final.empty:
     df_display['Menor Valor Hist. (R$)'] = df_display['Menor Valor Hist. (R$)'].apply(formatar_brl)
     df_display['Variação (Δ%)'] = df_final['Variação (Δ%)'].apply(formatar_pct_com_seta)
 
-    # Exibição do painel interativo formatado com classe CSS 'dataframe' (Estilo Dados Bancários)
     st.subheader("📋 Mapa de Cotação Consolidado & Comparativo Histórico")
 
     html_tabela = df_display.to_html(escape=False, index=False, classes='dataframe')
     st.markdown(html_tabela, unsafe_allow_html=True)
 
-    # Preenche o botão de download de PDF dentro da caixa superior aberta
     pdf_bytes = gerar_pdf(df_final)
     placeholder_pdf.download_button(
         label="📥 Baixar Mapa em PDF",
@@ -667,7 +666,7 @@ else:
 st.markdown("---")
 
 # ==============================================================================
-# 🔍 BARRA DE CONSULTA CONGELADA NO RODAPÉ DA TELA
+# 🔍 BARRA DE CONSULTA COMPACTA E CONGELADA NO RODAPÉ DA TELA
 # ==============================================================================
 st.markdown('<div class="footer-pesquisa">', unsafe_allow_html=True)
 st.markdown("**🔍 Consulta Rápida de Histórico por Código do Item**")
@@ -692,10 +691,7 @@ if codigo_pesquisa:
                 forn_val = "Não identificado"
                 preco_val = 0.0
                 
-                # Coluna C (Número do Pedido) = Índice 2
                 num_pedido = str(h_row.get(2, "N/D"))
-                
-                # Coluna M (Data Emissão) = Índice 12
                 data_raw = str(h_row.get(12, ""))
                 try:
                     data_dt = pd.to_datetime(data_raw, dayfirst=True)
@@ -710,13 +706,12 @@ if codigo_pesquisa:
                     else:
                         for val in h_row.values:
                             t = str(val)
-                            if len(t) > 5 and not any(char.isdigit() for char in t[:3]) and t.lower() not in ['a vista', '25 dias', '30 dias']:
+                            if len(t) > 5 and not any(char.isdigit() for char in t[:3]) and t.lower() not in ['a vista', '25 dias']:
                                 forn_val = t
                                 break
                 except:
                     pass
                     
-                # Coluna K (Preço Unitário) = Índice 10
                 try:
                     p_col = limpar_valor(h_row.get(10, 0))
                     if p_col > 0:
@@ -739,14 +734,11 @@ if codigo_pesquisa:
         df_historico_item = pd.DataFrame(compras_encontradas)
         st.table(df_historico_item)
 
-        # GRÁFICO DE LINHA SUAVIZADA COM EIXO Y EM BRANCO E VALORES VISÍVEIS
         if dados_grafico:
             st.markdown("#### 📈 Evolução do Preço Histórico")
             df_chart = pd.DataFrame(dados_grafico).sort_values("Data Emissao")
             
             df_chart["Data Formatada"] = df_chart["Data Emissao"].dt.strftime('%d/%m/%Y')
-            
-            # Formatando os valores monetários exatamente com duas casas decimais no padrão brasileiro para o gráfico
             df_chart["Preço Formatado BR"] = df_chart["Prc Unitario"].apply(lambda x: f"R$ {x:,.2f}".replace(',', 'X').replace('.', ',').replace('X', '.'))
             
             fig = px.line(
@@ -765,7 +757,6 @@ if codigo_pesquisa:
                 textposition="top center"
             )
             
-            # Configuração do Eixo Y: showticklabels=False oculta os números laterais mantendo o gráfico limpo
             fig.update_layout(
                 xaxis_title="Data Emissao",
                 yaxis_title="",
