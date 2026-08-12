@@ -26,7 +26,7 @@ st.markdown("""
     
     .block-container {
         padding-top: 1rem !important;
-        padding-bottom: 150px !important; /* Espaço para o rodapé fixo não cobrir o final da página */
+        padding-bottom: 150px !important;
     }
 
     /* Oculta completamente a barra superior padrão do Streamlit (Share, GitHub, Menu, etc.) */
@@ -686,7 +686,7 @@ if codigo_pesquisa:
                     else:
                         for val in h_row.values:
                             t = str(val)
-                            if len(t) > 5 and not any(char.isdigit() for char in t[:3]) and t.lower() not in ['a vista', '25 dias', '30 dias']:
+                            if len(t) > 5 and not any(char.isdigit() for char in t[:3]) and t.lower() not in ['a vista', '25 dias']:
                                 forn_val = t
                                 break
                 except:
@@ -715,7 +715,7 @@ if codigo_pesquisa:
         df_historico_item = pd.DataFrame(compras_encontradas)
         st.table(df_historico_item)
 
-        # GRÁFICO DE LINHA SUAVIZADA (CURVA) COM PLOTLY, LINHAS DE GRADE E ESCALA DE 0.50
+        # GRÁFICO DE LINHA SUAVIZADA COM EIXO Y EM BRANCO E VALORES VISÍVEIS
         if dados_grafico:
             st.markdown("#### 📈 Evolução do Preço Histórico")
             df_chart = pd.DataFrame(dados_grafico).sort_values("Data Emissao")
@@ -730,21 +730,21 @@ if codigo_pesquisa:
                 x="Data Formatada", 
                 y="Prc Unitario",
                 markers=True,
-                line_shape="spline", # Curva suavizada idêntica à referência
+                line_shape="spline",
                 text="Preço Formatado BR"
             )
             
             fig.update_traces(
-                fill='tozeroy', # Preenchimento de área abaixo da curva
+                fill='tozeroy',
                 line=dict(color='#00d2c4', width=3),
                 marker=dict(size=8, color='#00d2c4'),
                 textposition="top center"
             )
             
-            # Configurando as linhas de grade visíveis e o espaçamento do eixo Y de 0.50 em 0.50
+            # Configuração do Eixo Y: showticklabels=False oculta os números laterais mantendo o gráfico limpo
             fig.update_layout(
                 xaxis_title="Data Emissao",
-                yaxis_title="Prc Unitario",
+                yaxis_title="",
                 plot_bgcolor='rgba(255,255,255,0.02)',
                 paper_bgcolor='rgba(0,0,0,0)',
                 font=dict(color='#333333'),
@@ -752,7 +752,8 @@ if codigo_pesquisa:
                 yaxis=dict(
                     showgrid=True, 
                     gridcolor='rgba(200,200,200,0.3)',
-                    dtick=0.50 # Define explicitamente a divisão da escala de 0.50 em 0.50
+                    showticklabels=False, # Deixa a coluna de preços do gráfico em branco
+                    dtick=0.50
                 ),
                 margin=dict(l=20, r=20, t=30, b=20)
             )
