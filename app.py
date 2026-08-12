@@ -148,7 +148,9 @@ def carregar_historico_github():
 
 historico, status_historico = carregar_historico_github()
 
-# CAIXA DE CONFIGURAÇÕES (ABRE/FECHA FIXA NO TOPO)
+# ==============================================================================
+# CAIXA DE CONFIGURAÇÕES E UPLOAD AGORA POSICIONADAS NO TOPO ABSOLUTO
+# ==============================================================================
 with st.expander("⚙️ Abrir / Fechar Configurações (Upload e Exportação PDF)", expanded=False):
     col_exp1, col_exp2 = st.columns([2, 1])
     with col_exp1:
@@ -161,7 +163,7 @@ with st.expander("⚙️ Abrir / Fechar Configurações (Upload e Exportação P
         st.markdown("### 📥 Exportar Relatório")
         placeholder_pdf = st.empty()
 
-# Topo do App: Título e Status no canto superior direito
+# Topo do App: Título e Status no canto superior direito (Movidos para baixo das Configurações)
 col_title, col_status = st.columns([7, 3])
 with col_title:
     st.title("📊 Gestão Estratégica de Compras | Mapa de Cotação")
@@ -752,7 +754,7 @@ if codigo_pesquisa:
                 yaxis=dict(
                     showgrid=True, 
                     gridcolor='rgba(200,200,200,0.3)',
-                    showticklabels=False, # Deixa a coluna de preços do gráfico em branco
+                    showticklabels=False,
                     dtick=0.50
                 ),
                 margin=dict(l=20, r=20, t=30, b=20)
