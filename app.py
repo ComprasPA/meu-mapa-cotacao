@@ -18,7 +18,7 @@ st.set_page_config(
     layout="wide"
 )
 
-# Estilização visual corporativa estilo Dados Bancários e ocultação de elementos padrão
+# Estilização visual corporativa e congelamento da barra de pesquisa no rodapé
 st.markdown("""
     <style>
     .main { background-color: #ffffff; }
@@ -26,6 +26,7 @@ st.markdown("""
     
     .block-container {
         padding-top: 1rem !important;
+        padding-bottom: 150px !important; /* Espaço para o rodapé fixo não cobrir o final da página */
     }
 
     /* Oculta completamente a barra superior padrão do Streamlit (Share, GitHub, Menu, etc.) */
@@ -69,6 +70,19 @@ st.markdown("""
     .streamlit-expanderContent {
         padding: 15px !important;
         background-color: #ffffff !important;
+    }
+
+    /* CONGELAR A SEÇÃO DE CONSULTA NO RODAPÉ DA TELA */
+    .footer-pesquisa {
+        position: fixed;
+        bottom: 0;
+        left: 0;
+        width: 100%;
+        background-color: #f8f9fa;
+        border-top: 2px solid #2f5597;
+        padding: 10px 20px;
+        z-index: 99999;
+        box-shadow: 0px -4px 10px rgba(0, 0, 0, 0.1);
     }
 
     /* Estilização da Tabela no Estilo Dados Bancários */
@@ -421,129 +435,6 @@ def gerar_pdf(df):
     return bytes(pdf_output)
 
 # ==============================================================================
-# 🔍 BLOCO DE CONSULTA DE HISTÓRICO (SEMPRE VISÍVEL NO TOPO)
-# ==============================================================================
-st.subheader("🔍 Consulta de Histórico por Código do Item")
-
-col_search1, col_search2 = st.columns([3, 7])
-with col_search1:
-    codigo_pesquisa = st.text_input("Digite ou cole o código do item (10 dígitos ou parcial):", "")
-
-if codigo_pesquisa:
-    cod_limpo = padronizar_codigo_10_digitos(codigo_pesquisa)
-    compras_encontradas = []
-    dados_grafico = []
-    
-    if not historico.empty:
-        for h_idx, h_row in historico.iterrows():
-            encontrou = False
-            for col_idx in h_row.index:
-                val_celula = str(h_row[col_idx])
-                if cod_limpo in padronizar_codigo_10_digitos(val_celula) and cod_limpo != '0000000000':
-                    encontrou = True
-                    break
-            
-            if encontrou:
-                forn_val = "Não identificado"
-                preco_val = 0.0
-                
-                # Coluna C (Número do Pedido) = Índice 2
-                num_pedido = str(h_row.get(2, "N/D"))
-                
-                # Coluna M (Data Emissão) = Índice 12
-                data_raw = str(h_row.get(12, ""))
-                try:
-                    data_dt = pd.to_datetime(data_raw, dayfirst=True)
-                    data_val = data_dt.strftime('%d/%m/%Y')
-                except:
-                    data_val = data_raw
-                
-                try:
-                    f_col = str(h_row.get(4, ""))
-                    if len(f_col) > 3 and f_col.lower() not in ['nan', 'a vista', '25 dias']:
-                        forn_val = f_col
-                    else:
-                        for val in h_row.values:
-                            t = str(val)
-                            if len(t) > 5 and not any(char.isdigit() for char in t[:3]) and t.lower() not in ['a vista', '25 dias', '30 dias']:
-                                forn_val = t
-                                break
-                except:
-                    pass
-                    
-                # Coluna K (Preço Unitário) = Índice 10
-                try:
-                    p_col = limpar_valor(h_row.get(10, 0))
-                    if p_col > 0:
-                        preco_val = p_col
-                except:
-                    pass
-                    
-                compras_encontradas.append({
-                    'Nº do Pedido': num_pedido,
-                    'Data Emissao PC': data_val,
-                    'Fornecedor da Compra': forn_val,
-                    'Prc Unitario': formatar_brl(preco_val) if preco_val > 0 else "R$ 0,00"
-                })
-                
-                if preco_val > 0 and pd.notna(pd.to_datetime(data_raw, dayfirst=True, errors='coerce')):
-                    dados_grafico.append({"Data Emissao": pd.to_datetime(data_raw, dayfirst=True), "Prc Unitario": preco_val})
-
-    if compras_encontradas:
-        st.success(f"Foram encontradas **{len(compras_encontradas)}** ocorrência(s) de compra para o código pesquisado:")
-        df_historico_item = pd.DataFrame(compras_encontradas)
-        st.table(df_historico_item)
-
-        # GRÁFICO DE LINHA SUAVIZADA (CURVA) COM PLOTLY, LINHAS DE GRADE E ESCALA DE 0.50
-        if dados_grafico:
-            st.markdown("#### 📈 Evolução do Preço Histórico")
-            df_chart = pd.DataFrame(dados_grafico).sort_values("Data Emissao")
-            
-            df_chart["Data Formatada"] = df_chart["Data Emissao"].dt.strftime('%d/%m/%Y')
-            
-            # Formatando os valores monetários exatamente com duas casas decimais no padrão brasileiro para o gráfico
-            df_chart["Preço Formatado BR"] = df_chart["Prc Unitario"].apply(lambda x: f"R$ {x:,.2f}".replace(',', 'X').replace('.', ',').replace('X', '.'))
-            
-            fig = px.line(
-                df_chart, 
-                x="Data Formatada", 
-                y="Prc Unitario",
-                markers=True,
-                line_shape="spline", # Curva suavizada idêntica à referência
-                text="Preço Formatado BR"
-            )
-            
-            fig.update_traces(
-                fill='tozeroy', # Preenchimento de área abaixo da curva
-                line=dict(color='#00d2c4', width=3),
-                marker=dict(size=8, color='#00d2c4'),
-                textposition="top center"
-            )
-            
-            # Configurando as linhas de grade visíveis e o espaçamento do eixo Y de 0.50 em 0.50
-            fig.update_layout(
-                xaxis_title="Data Emissao",
-                yaxis_title="Prc Unitario",
-                plot_bgcolor='rgba(255,255,255,0.02)',
-                paper_bgcolor='rgba(0,0,0,0)',
-                font=dict(color='#333333'),
-                xaxis=dict(showgrid=True, gridcolor='rgba(200,200,200,0.3)'),
-                yaxis=dict(
-                    showgrid=True, 
-                    gridcolor='rgba(200,200,200,0.3)',
-                    dtick=0.50 # Define explicitamente a divisão da escala de 0.50 em 0.50
-                ),
-                margin=dict(l=20, r=20, t=30, b=20)
-            )
-            
-            st.plotly_chart(fig, use_container_width=True)
-    else:
-        if codigo_pesquisa:
-            st.warning("⚠️ Nenhuma compra anterior encontrada no histórico para este código.")
-
-st.markdown("---")
-
-# ==============================================================================
 # PROCESSAMENTO DO MAPA DE COTAÇÃO (VIA UPLOAD)
 # ==============================================================================
 cotacao = pd.DataFrame()
@@ -748,3 +639,124 @@ elif uploaded_cot is not None:
     st.warning("⚠️ Nenhum item válido encontrado no arquivo carregado.")
 else:
     st.info("👆 Clique na caixa **⚙️ Abrir / Fechar Configurações** acima e faça o upload do seu Mapa de Cotação (.csv, .xlsx, .docx ou .mhtml) caso queira analisar um mapa completo.")
+
+st.markdown("---")
+
+# ==============================================================================
+# 🔍 BARRA DE CONSULTA CONGELADA NO RODAPÉ DA TELA
+# ==============================================================================
+st.markdown('<div class="footer-pesquisa">', unsafe_allow_html=True)
+st.markdown("**🔍 Consulta Rápida de Histórico por Código do Item**")
+codigo_pesquisa = st.text_input("Digite ou cole o código do item (10 dígitos ou parcial):", "", key="input_pesquisa_fixa")
+st.markdown('</div>', unsafe_allow_html=True)
+
+if codigo_pesquisa:
+    cod_limpo = padronizar_codigo_10_digitos(codigo_pesquisa)
+    compras_encontradas = []
+    dados_grafico = []
+    
+    if not historico.empty:
+        for h_idx, h_row in historico.iterrows():
+            encontrou = False
+            for col_idx in h_row.index:
+                val_celula = str(h_row[col_idx])
+                if cod_limpo in padronizar_codigo_10_digitos(val_celula) and cod_limpo != '0000000000':
+                    encontrou = True
+                    break
+            
+            if encontrou:
+                forn_val = "Não identificado"
+                preco_val = 0.0
+                
+                # Coluna C (Número do Pedido) = Índice 2
+                num_pedido = str(h_row.get(2, "N/D"))
+                
+                # Coluna M (Data Emissão) = Índice 12
+                data_raw = str(h_row.get(12, ""))
+                try:
+                    data_dt = pd.to_datetime(data_raw, dayfirst=True)
+                    data_val = data_dt.strftime('%d/%m/%Y')
+                except:
+                    data_val = data_raw
+                
+                try:
+                    f_col = str(h_row.get(4, ""))
+                    if len(f_col) > 3 and f_col.lower() not in ['nan', 'a vista', '25 dias']:
+                        forn_val = f_col
+                    else:
+                        for val in h_row.values:
+                            t = str(val)
+                            if len(t) > 5 and not any(char.isdigit() for char in t[:3]) and t.lower() not in ['a vista', '25 dias', '30 dias']:
+                                forn_val = t
+                                break
+                except:
+                    pass
+                    
+                # Coluna K (Preço Unitário) = Índice 10
+                try:
+                    p_col = limpar_valor(h_row.get(10, 0))
+                    if p_col > 0:
+                        preco_val = p_col
+                except:
+                    pass
+                    
+                compras_encontradas.append({
+                    'Nº do Pedido': num_pedido,
+                    'Data Emissao PC': data_val,
+                    'Fornecedor da Compra': forn_val,
+                    'Prc Unitario': formatar_brl(preco_val) if preco_val > 0 else "R$ 0,00"
+                })
+                
+                if preco_val > 0 and pd.notna(pd.to_datetime(data_raw, dayfirst=True, errors='coerce')):
+                    dados_grafico.append({"Data Emissao": pd.to_datetime(data_raw, dayfirst=True), "Prc Unitario": preco_val})
+
+    if compras_encontradas:
+        st.success(f"Foram encontradas **{len(compras_encontradas)}** ocorrência(s) de compra para o código pesquisado:")
+        df_historico_item = pd.DataFrame(compras_encontradas)
+        st.table(df_historico_item)
+
+        # GRÁFICO DE LINHA SUAVIZADA (CURVA) COM PLOTLY, LINHAS DE GRADE E ESCALA DE 0.50
+        if dados_grafico:
+            st.markdown("#### 📈 Evolução do Preço Histórico")
+            df_chart = pd.DataFrame(dados_grafico).sort_values("Data Emissao")
+            
+            df_chart["Data Formatada"] = df_chart["Data Emissao"].dt.strftime('%d/%m/%Y')
+            
+            # Formatando os valores monetários exatamente com duas casas decimais no padrão brasileiro para o gráfico
+            df_chart["Preço Formatado BR"] = df_chart["Prc Unitario"].apply(lambda x: f"R$ {x:,.2f}".replace(',', 'X').replace('.', ',').replace('X', '.'))
+            
+            fig = px.line(
+                df_chart, 
+                x="Data Formatada", 
+                y="Prc Unitario",
+                markers=True,
+                line_shape="spline", # Curva suavizada idêntica à referência
+                text="Preço Formatado BR"
+            )
+            
+            fig.update_traces(
+                fill='tozeroy', # Preenchimento de área abaixo da curva
+                line=dict(color='#00d2c4', width=3),
+                marker=dict(size=8, color='#00d2c4'),
+                textposition="top center"
+            )
+            
+            # Configurando as linhas de grade visíveis e o espaçamento do eixo Y de 0.50 em 0.50
+            fig.update_layout(
+                xaxis_title="Data Emissao",
+                yaxis_title="Prc Unitario",
+                plot_bgcolor='rgba(255,255,255,0.02)',
+                paper_bgcolor='rgba(0,0,0,0)',
+                font=dict(color='#333333'),
+                xaxis=dict(showgrid=True, gridcolor='rgba(200,200,200,0.3)'),
+                yaxis=dict(
+                    showgrid=True, 
+                    gridcolor='rgba(200,200,200,0.3)',
+                    dtick=0.50 # Define explicitamente a divisão da escala de 0.50 em 0.50
+                ),
+                margin=dict(l=20, r=20, t=30, b=20)
+            )
+            
+            st.plotly_chart(fig, use_container_width=True)
+    else:
+        st.warning("⚠️ Nenhuma compra anterior encontrada no histórico para este código.")
