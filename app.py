@@ -18,7 +18,7 @@ st.set_page_config(
     layout="wide"
 )
 
-# Estilização visual corporativa e congelamento da barra de pesquisa compacta no rodapé
+# Estilização visual corporativa e ajuste responsivo da tabela para caber em qualquer monitor
 st.markdown("""
     <style>
     .main { background-color: #ffffff; }
@@ -27,14 +27,15 @@ st.markdown("""
     .block-container {
         padding-top: 1rem !important;
         padding-bottom: 150px !important;
+        max-width: 100% !important; /* Ocupa 100% da largura da tela do monitor */
     }
 
-    /* Oculta completamente a barra superior padrão do Streamlit (Share, GitHub, Menu, etc.) */
+    /* Oculta completamente a barra superior padrão do Streamlit */
     header { visibility: hidden !important; }
     #MainMenu { visibility: hidden !important; }
     footer { visibility: hidden !important; }
 
-    /* Anula e oculta qualquer pop-up ou modal de Clear Caches nativo do Streamlit */
+    /* Anula e oculta qualquer pop-up ou modal nativo */
     div[data-baseweb="modal"], div.stDialog, div[role="dialog"] {
         display: none !important;
     }
@@ -51,7 +52,7 @@ st.markdown("""
         border: 1px solid #d2e3fc;
     }
 
-    /* Expander fixo no topo de ponta a ponta */
+    /* Expander fixo no topo */
     div[data-testid="stExpander"] {
         border: 1px solid #d9d9d9 !important;
         background-color: #ffffff !important;
@@ -85,37 +86,35 @@ st.markdown("""
         box-shadow: 0px -4px 10px rgba(0, 0, 0, 0.1);
     }
     
-    /* Limita a largura do campo de input para deixá-lo menor/compacto */
     div[data-testid="stTextInput"] {
         max-width: 400px !important;
     }
 
-    /* Estilização da Tabela no Estilo Dados Bancários */
+    /* ESTILIZAÇÃO RESPONSIVA DA TABELA (AJUSTADA AO MONITOR) */
     .dataframe {
         width: 100% !important;
+        table-layout: auto !important;
         border-collapse: collapse !important;
         font-family: 'Helvetica Neue', sans-serif !important;
+        font-size: 12px !important; /* Reduz ligeiramente para acomodar todas as colunas perfeitamente */
     }
     .dataframe th {
         background-color: #2f5597 !important;
         color: white !important;
         text-align: center !important;
         font-weight: bold !important;
-        padding: 10px !important;
+        padding: 8px 6px !important;
         border: 1px solid #b4c6e7 !important;
-        font-size: 13px !important;
-        white-space: nowrap !important;
+        font-size: 12px !important;
+        word-break: break-word !important;
     }
     .dataframe td {
-        padding: 9px 10px !important;
+        padding: 7px 6px !important;
         border: 1px solid #d9d9d9 !important;
         color: #000000 !important;
-        font-size: 13px !important;
+        font-size: 12px !important;
         text-align: right;
-    }
-    .dataframe td:nth-child(11), .dataframe th:nth-child(11) {
-        white-space: nowrap !important;
-        text-align: center !important;
+        word-break: break-word !important;
     }
     .dataframe tr:nth-child(even) {
         background-color: #f2f5f9 !important;
@@ -125,6 +124,9 @@ st.markdown("""
     }
     .dataframe td:nth-child(1), .dataframe td:nth-child(2), .dataframe td:nth-child(3), .dataframe td:nth-child(6), .dataframe td:nth-child(8) {
         text-align: left;
+    }
+    .dataframe td:nth-child(11), .dataframe th:nth-child(11) {
+        text-align: center !important;
     }
     </style>
 """, unsafe_allow_html=True)
@@ -238,11 +240,11 @@ def formatar_pct_com_seta(valor):
     val_fmt = f"{val_float:+,.2f}%".replace(',', 'X').replace('.', ',').replace('X', '.')
     
     if val_float > 0:
-        return f"<span style='color: #c00000; font-size: 15px; font-weight: 900; white-space: nowrap;'>↑ {val_fmt}</span>"
+        return f"<span style='color: #c00000; font-size: 14px; font-weight: 900; white-space: nowrap;'>↑ {val_fmt}</span>"
     elif val_float < 0:
-        return f"<span style='color: #2ca02c; font-size: 15px; font-weight: 900; white-space: nowrap;'>↓ {val_fmt}</span>"
+        return f"<span style='color: #2ca02c; font-size: 14px; font-weight: 900; white-space: nowrap;'>↓ {val_fmt}</span>"
     else:
-        return f"<span style='color: #555555; font-size: 13px; font-weight: bold; white-space: nowrap;'>{val_fmt}</span>"
+        return f"<span style='color: #555555; font-size: 12px; font-weight: bold; white-space: nowrap;'>{val_fmt}</span>"
 
 def padronizar_codigo_10_digitos(codigo):
     if pd.isna(codigo):
@@ -314,7 +316,8 @@ def extrair_tabela_excel_inteligente(arquivo_excel):
         header_row_idx = 0
         for idx, row in df_raw.iterrows():
             row_str = " ".join([str(x) for x in row.values if pd.notna(x)]).lower()
-            if 'código' in row_str or 'codigo' in row_str or 'descrição' in row_str or 'vlr' in row_str or 'item' in row_str:
+            row_str_norm = "".join([c for c in unicodedata.normalize('NFKD', row_str) if not unicodedata.combining(c)])
+            if 'codigo' in row_str_norm or 'descricao' in row_str_norm or 'vlr' in row_str_norm or 'preco' in row_str_norm or 'item' in row_str_norm:
                 header_row_idx = idx
                 break
                 
@@ -492,7 +495,7 @@ if not cotacao.empty:
     c_cod = achar_coluna(cotacao, ['código', 'codigo', 'produto', 'sku'])
     c_desc = achar_coluna(cotacao, ['descrição', 'descricao'])
     c_qtd = achar_coluna(cotacao, ['qtd', 'quantidade'])
-    c_vlr = achar_coluna(cotacao, ['valor unit', 'vlr. unit', 'unitario', 'preço unit', 'preco unit', 'vlr', 'preço', 'preco'])
+    c_vlr = achar_coluna(cotacao, ['valor unit', 'vlr. unit', 'vlr unit', 'unitario', 'preço unit', 'preco unit', 'vlr', 'preço', 'preco'])
     c_forn = achar_coluna(cotacao, ['fornecedor', 'empresa'])
     c_status = achar_coluna(cotacao, ['status'])
 
@@ -754,10 +757,9 @@ if codigo_pesquisa:
                 fill='tozeroy',
                 line=dict(color='#00d2c4', width=3),
                 marker=dict(size=8, color='#00d2c4'),
-                textposition="top center" # Garante o posicionamento ideal sem ocultar pontos
+                textposition="top center"
             )
             
-            # Ajustando a margem superior (t=50) para que os preços do topo não fiquem cortados
             fig.update_layout(
                 xaxis_title="Data Emissao",
                 yaxis_title="",
@@ -771,7 +773,7 @@ if codigo_pesquisa:
                     showticklabels=False,
                     dtick=0.50
                 ),
-                margin=dict(l=20, r=20, t=50, b=20) # Margem superior expandida para caber todos os textos
+                margin=dict(l=20, r=20, t=50, b=20)
             )
             
             st.plotly_chart(fig, use_container_width=True)
