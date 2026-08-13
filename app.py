@@ -225,7 +225,6 @@ def formatar_qtd(valor):
     except:
         val_float = 0.0
     
-    # Se a parte à direita da vírgula for zero, exibe apenas a parte inteira sem decimais
     if val_float.is_integer():
         return f"{int(val_float):,}".replace(',', '.')
     else:
@@ -680,11 +679,11 @@ else:
 st.markdown("---")
 
 # ==============================================================================
-# 🔍 BARRA DE CONSULTA COMPACTA E CONGELADA NO RODAPÉ DA TELA
+# 🔍 BARRA DE CONSULTA COMPACTA E CONGELADA NO RODAPÉ DA TELA (BUSCA EXATA)
 # ==============================================================================
 st.markdown('<div class="footer-pesquisa">', unsafe_allow_html=True)
 st.markdown("**🔍 Consulta Rápida de Histórico por Código do Item**")
-codigo_pesquisa = st.text_input("Digite ou cole o código do item (10 dígitos ou parcial):", "", key="input_pesquisa_fixa")
+codigo_pesquisa = st.text_input("Digite ou cole o código do item:", "", key="input_pesquisa_fixa")
 st.markdown('</div>', unsafe_allow_html=True)
 
 if codigo_pesquisa:
@@ -692,16 +691,17 @@ if codigo_pesquisa:
     compras_encontradas = []
     dados_grafico = []
     
-    if not historico.empty:
+    if not historico.empty and cod_limpo != '':
         for h_idx, h_row in historico.iterrows():
-            encontrou = False
+            # Verifica se alguma coluna da linha possui exatamente o código limpo pesquisado
+            linha_possui_codigo = False
             for col_idx in h_row.index:
                 val_celula = str(h_row[col_idx])
-                if cod_limpo in padronizar_codigo_10_digitos(val_celula) and cod_limpo != '0000000000':
-                    encontrou = True
+                if padronizar_codigo_10_digitos(val_celula) == cod_limpo:
+                    linha_possui_codigo = True
                     break
             
-            if encontrou:
+            if linha_possui_codigo:
                 forn_val = "Não identificado"
                 preco_val = 0.0
                 
@@ -744,7 +744,7 @@ if codigo_pesquisa:
                     dados_grafico.append({"Data Emissao": pd.to_datetime(data_raw, dayfirst=True), "Prc Unitario": preco_val})
 
     if compras_encontradas:
-        st.success(f"Foram encontradas **{len(compras_encontradas)}** ocorrência(s) de compra para o código pesquisado:")
+        st.success(f"Foram encontradas **{len(compras_encontradas)}** ocorrência(s) de compra para o código **{codigo_pesquisa}**:")
         df_historico_item = pd.DataFrame(compras_encontradas)
         st.table(df_historico_item)
 
@@ -790,4 +790,4 @@ if codigo_pesquisa:
             st.plotly_chart(fig, use_container_width=True)
     else:
         if codigo_pesquisa:
-            st.warning("⚠️ Nenhuma compra anterior encontrada no histórico para este código.")
+            st.warning(f"⚠️ Nenhuma compra anterior encontrada no histórico para o código **{codigo_pesquisa}**.")
