@@ -18,7 +18,7 @@ st.set_page_config(
     layout="wide"
 )
 
-# Estilização visual corporativa e ajuste responsivo da tabela para caber em qualquer monitor
+# Estilização visual corporativa e regras de layout (sem quebra de texto em código e item)
 st.markdown("""
     <style>
     .main { background-color: #ffffff; }
@@ -27,7 +27,7 @@ st.markdown("""
     .block-container {
         padding-top: 1rem !important;
         padding-bottom: 150px !important;
-        max-width: 100% !important; /* Ocupa 100% da largura da tela do monitor */
+        max-width: 100% !important;
     }
 
     /* Oculta completamente a barra superior padrão do Streamlit */
@@ -90,13 +90,13 @@ st.markdown("""
         max-width: 400px !important;
     }
 
-    /* ESTILIZAÇÃO RESPONSIVA DA TABELA (AJUSTADA AO MONITOR) */
+    /* ESTILIZAÇÃO DA TABELA (SEM QUEBRA DE TEXTO EM ITEM E CÓDIGO) */
     .dataframe {
         width: 100% !important;
         table-layout: auto !important;
         border-collapse: collapse !important;
         font-family: 'Helvetica Neue', sans-serif !important;
-        font-size: 12px !important; /* Reduz ligeiramente para acomodar todas as colunas perfeitamente */
+        font-size: 12px !important;
     }
     .dataframe th {
         background-color: #2f5597 !important;
@@ -106,7 +106,7 @@ st.markdown("""
         padding: 8px 6px !important;
         border: 1px solid #b4c6e7 !important;
         font-size: 12px !important;
-        word-break: break-word !important;
+        white-space: nowrap !important;
     }
     .dataframe td {
         padding: 7px 6px !important;
@@ -114,7 +114,6 @@ st.markdown("""
         color: #000000 !important;
         font-size: 12px !important;
         text-align: right;
-        word-break: break-word !important;
     }
     .dataframe tr:nth-child(even) {
         background-color: #f2f5f9 !important;
@@ -122,11 +121,18 @@ st.markdown("""
     .dataframe tr:nth-child(odd) {
         background-color: #ffffff !important;
     }
-    .dataframe td:nth-child(1), .dataframe td:nth-child(2), .dataframe td:nth-child(3), .dataframe td:nth-child(6), .dataframe td:nth-child(8) {
+    /* Item (coluna 1) e Código (coluna 2) sem quebra de texto */
+    .dataframe td:nth-child(1), .dataframe th:nth-child(1),
+    .dataframe td:nth-child(2), .dataframe th:nth-child(2) {
+        white-space: nowrap !important;
+        text-align: center !important;
+    }
+    .dataframe td:nth-child(3), .dataframe td:nth-child(6), .dataframe td:nth-child(8) {
         text-align: left;
     }
     .dataframe td:nth-child(11), .dataframe th:nth-child(11) {
         text-align: center !important;
+        white-space: nowrap !important;
     }
     </style>
 """, unsafe_allow_html=True)
@@ -179,7 +185,7 @@ with col_status:
 
 st.markdown("---")
 
-# Funções de Conversão e Formatação Padrão Brasileiro Rigoroso (X.XXX,XX)
+# Funções de Conversão e Formatação
 def limpar_valor(valor):
     if pd.isna(valor):
         return 0.0
@@ -218,7 +224,12 @@ def formatar_qtd(valor):
         val_float = float(valor)
     except:
         val_float = 0.0
-    return f"{val_float:,.2f}".replace(',', 'X').replace('.', ',').replace('X', '.')
+    
+    # Se a parte à direita da vírgula for zero, exibe apenas a parte inteira sem decimais
+    if val_float.is_integer():
+        return f"{int(val_float):,}".replace(',', '.')
+    else:
+        return f"{val_float:,.2f}".replace(',', 'X').replace('.', ',').replace('X', '.')
 
 def formatar_pct(valor):
     if valor == "" or pd.isna(valor) or valor is None:
