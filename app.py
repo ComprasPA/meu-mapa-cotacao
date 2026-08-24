@@ -174,7 +174,7 @@ with col_status:
 
 st.markdown("---")
 
-# Funções Robustas de Conversão e Formatação
+# Funções de Conversão e Formatação
 def limpar_valor(valor):
     if pd.isna(valor) or valor is None:
         return 0.0
@@ -182,7 +182,6 @@ def limpar_valor(valor):
     if not val_str or val_str.lower() in ['nan', 'total item', 'total', '##########', 'a vista', '25 dias', 'item', 'código', 'produto', 'descrição']:
         return 0.0
     
-    # Tratamento universal para formatos numéricos brasileiros e internacionais
     if '.' in val_str and ',' in val_str:
         if val_str.find('.') < val_str.find(','):
             val_str = val_str.replace('.', '').replace(',', '.')
@@ -494,10 +493,10 @@ if not cotacao.empty:
     c_desc = achar_coluna(cotacao, ['descrição', 'descricao'])
     c_qtd = achar_coluna(cotacao, ['qtd', 'quantidade'])
     
-    # Termos altamente abrangentes para capturar qualquer variação de Preço Novo / Unitário na planilha
+    # Termos altamente abrangentes para encontrar a coluna de preço unitário/novo
     c_vlr = achar_coluna(cotacao, [
-        'valor unit', 'vlr. unit', 'vlr unit', 'unitario', 
-        'preço unit', 'preco unit', 'vlr', 'preço', 'preco', 
+        'valor unitario', 'vlr. unitario', 'valor unit', 'vlr. unit', 'vlr unit', 'unitario', 
+        'preço unitario', 'preco unitario', 'preço unit', 'preco unit', 'vlr', 'preço', 'preco', 
         'unit', 'vl unit', 'vl. unit', 'vl.unit', 'valor'
     ])
     
@@ -525,15 +524,17 @@ if not cotacao.empty:
         desc = str(row[c_desc] if c_desc and pd.notna(row[c_desc]) else 'Descrição não informada')
         qtd = limpar_valor(row[c_qtd] if c_qtd and pd.notna(row[c_qtd]) else 1)
         
-        # Captura garantida do Preço Novo através da coluna identificada
+        # Leitura aprimorada do Preço Novo com Fallback Inteligente em todas as colunas
         preco_novo = 0.0
         if c_vlr and pd.notna(row[c_vlr]):
             preco_novo = limpar_valor(row[c_vlr])
-        else:
-            # Fallback automático: varre todas as colunas da linha procurando por um valor numérico válido se a coluna exata falhar
+            
+        # Se a coluna detectada retornou 0, varre todas as colunas da linha em busca de um número decimal válido (preço)
+        if preco_novo <= 0:
             for col_nome in row.index:
                 val_tentativa = limpar_valor(row[col_nome])
-                if val_tentativa > 0 and val_tentativa != qtd:
+                # Evita pegar a quantidade ou números que pareçam códigos de barras/SKUs inteiros muito grandes se houver decimais
+                if val_tentativa > 0 and val_tentativa != qtd and val_tentativa != float(padronizar_codigo_10_digitos(raw_cod) or 0):
                     preco_novo = val_tentativa
                     break
 
