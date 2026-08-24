@@ -18,7 +18,7 @@ st.set_page_config(
     layout="wide"
 )
 
-# Estilização visual corporativa e regras de layout (sem quebra de texto em código e item)
+# Estilização visual corporativa e regras de layout
 st.markdown("""
     <style>
     .main { background-color: #ffffff; }
@@ -30,17 +30,14 @@ st.markdown("""
         max-width: 100% !important;
     }
 
-    /* Oculta completamente a barra superior padrão do Streamlit */
     header { visibility: hidden !important; }
     #MainMenu { visibility: hidden !important; }
     footer { visibility: hidden !important; }
 
-    /* Anula e oculta qualquer pop-up ou modal nativo */
     div[data-baseweb="modal"], div.stDialog, div[role="dialog"] {
         display: none !important;
     }
 
-    /* Cabeçalho alinhado com status à direita */
     .status-badge {
         background-color: #e8f0fe;
         color: #1967d2;
@@ -52,7 +49,6 @@ st.markdown("""
         border: 1px solid #d2e3fc;
     }
 
-    /* Expander fixo no topo */
     div[data-testid="stExpander"] {
         border: 1px solid #d9d9d9 !important;
         background-color: #ffffff !important;
@@ -73,7 +69,6 @@ st.markdown("""
         background-color: #ffffff !important;
     }
 
-    /* CONGELAR E REDUZIR A SEÇÃO DE CONSULTA NO RODAPÉ DA TELA */
     .footer-pesquisa {
         position: fixed;
         bottom: 0;
@@ -90,7 +85,6 @@ st.markdown("""
         max-width: 400px !important;
     }
 
-    /* ESTILIZAÇÃO DA TABELA (SEM QUEBRA DE TEXTO EM ITEM E CÓDIGO) */
     .dataframe {
         width: 100% !important;
         table-layout: auto !important;
@@ -121,7 +115,6 @@ st.markdown("""
     .dataframe tr:nth-child(odd) {
         background-color: #ffffff !important;
     }
-    /* Item (coluna 1) e Código (coluna 2) sem quebra de texto */
     .dataframe td:nth-child(1), .dataframe th:nth-child(1),
     .dataframe td:nth-child(2), .dataframe th:nth-child(2) {
         white-space: nowrap !important;
@@ -161,9 +154,6 @@ def carregar_historico_github():
 
 historico, status_historico = carregar_historico_github()
 
-# ==============================================================================
-# CAIXA DE CONFIGURAÇÕES E UPLOAD NO TOPO ABSOLUTO
-# ==============================================================================
 with st.expander("⚙️ Abrir / Fechar Configurações (Upload e Exportação PDF)", expanded=False):
     col_exp1, col_exp2 = st.columns([2, 1])
     with col_exp1:
@@ -176,7 +166,6 @@ with st.expander("⚙️ Abrir / Fechar Configurações (Upload e Exportação P
         st.markdown("### 📥 Exportar Relatório")
         placeholder_pdf = st.empty()
 
-# Topo do App: Título e Status no canto superior direito
 col_title, col_status = st.columns([7, 3])
 with col_title:
     st.title("📊 Gestão Estratégica de Compras | Mapa de Cotação")
@@ -185,14 +174,15 @@ with col_status:
 
 st.markdown("---")
 
-# Funções de Conversão e Formatação
+# Funções Robustas de Conversão e Formatação
 def limpar_valor(valor):
-    if pd.isna(valor):
+    if pd.isna(valor) or valor is None:
         return 0.0
     val_str = str(valor).replace('R$', '').strip()
-    if not val_str or val_str.lower() in ['nan', 'total item', 'total', '##########', 'a vista', '25 dias', 'item', 'código', 'produto']:
+    if not val_str or val_str.lower() in ['nan', 'total item', 'total', '##########', 'a vista', '25 dias', 'item', 'código', 'produto', 'descrição']:
         return 0.0
     
+    # Tratamento universal para formatos numéricos brasileiros e internacionais
     if '.' in val_str and ',' in val_str:
         if val_str.find('.') < val_str.find(','):
             val_str = val_str.replace('.', '').replace(',', '.')
@@ -271,7 +261,6 @@ def limpar_texto_pdf(texto):
     texto_sem_acento = "".join([c for c in nfkd_form if not unicodedata.combining(c)])
     return texto_sem_acento.encode('latin-1', 'replace').decode('latin-1')
 
-# Leitura de arquivos MHTML / HTML
 def extrair_tabela_mhtml(arquivo_bytes):
     try:
         conteudo_str = arquivo_bytes.getvalue().decode('utf-8', errors='ignore')
@@ -356,7 +345,6 @@ def extrair_tabela_docx_limpa(arquivo_docx):
         st.error(f"Erro ao processar o documento Word: {e}")
     return pd.DataFrame()
 
-# Função para Gerar PDF do Relatório
 def gerar_pdf(df):
     class PDFProfissional(FPDF):
         def __init__(self):
@@ -505,8 +493,15 @@ if not cotacao.empty:
     c_cod = achar_coluna(cotacao, ['código', 'codigo', 'produto', 'sku'])
     c_desc = achar_coluna(cotacao, ['descrição', 'descricao'])
     c_qtd = achar_coluna(cotacao, ['qtd', 'quantidade'])
-    c_vlr = achar_coluna(cotacao, ['valor unit', 'vlr. unit', 'vlr unit', 'unitario', 'preço unit', 'preco unit', 'vlr', 'preço', 'preco'])
-    c_forn = achar_coluna(cotacao, ['fornecedor', 'empresa'])
+    
+    # Termos altamente abrangentes para capturar qualquer variação de Preço Novo / Unitário na planilha
+    c_vlr = achar_coluna(cotacao, [
+        'valor unit', 'vlr. unit', 'vlr unit', 'unitario', 
+        'preço unit', 'preco unit', 'vlr', 'preço', 'preco', 
+        'unit', 'vl unit', 'vl. unit', 'vl.unit', 'valor'
+    ])
+    
+    c_forn = achar_coluna(cotacao, ['fornecedor', 'empresa', 'nome'])
     c_status = achar_coluna(cotacao, ['status'])
 
     if c_status and not cotacao.empty:
@@ -529,7 +524,19 @@ if not cotacao.empty:
         
         desc = str(row[c_desc] if c_desc and pd.notna(row[c_desc]) else 'Descrição não informada')
         qtd = limpar_valor(row[c_qtd] if c_qtd and pd.notna(row[c_qtd]) else 1)
-        preco_novo = limpar_valor(row[c_vlr] if c_vlr and pd.notna(row[c_vlr]) else 0)
+        
+        # Captura garantida do Preço Novo através da coluna identificada
+        preco_novo = 0.0
+        if c_vlr and pd.notna(row[c_vlr]):
+            preco_novo = limpar_valor(row[c_vlr])
+        else:
+            # Fallback automático: varre todas as colunas da linha procurando por um valor numérico válido se a coluna exata falhar
+            for col_nome in row.index:
+                val_tentativa = limpar_valor(row[col_nome])
+                if val_tentativa > 0 and val_tentativa != qtd:
+                    preco_novo = val_tentativa
+                    break
+
         forn_novo = str(row[c_forn] if c_forn and pd.notna(row[c_forn]) else 'Fornecedor não informado')
         
         if codigo_original.lower().replace('0', '') in ['código', 'codigo', 'item', 'produto', 'nan']:
@@ -679,7 +686,7 @@ else:
 st.markdown("---")
 
 # ==============================================================================
-# 🔍 BARRA DE CONSULTA COMPACTA E CONGELADA NO RODAPÉ DA TELA (BUSCA EXATA)
+# 🔍 BARRA DE CONSULTA COMPACTA E CONGELADA NO RODAPÉ DA TELA
 # ==============================================================================
 st.markdown('<div class="footer-pesquisa">', unsafe_allow_html=True)
 st.markdown("**🔍 Consulta Rápida de Histórico por Código do Item**")
@@ -693,7 +700,6 @@ if codigo_pesquisa:
     
     if not historico.empty and cod_limpo != '':
         for h_idx, h_row in historico.iterrows():
-            # Verifica se alguma coluna da linha possui exatamente o código limpo pesquisado
             linha_possui_codigo = False
             for col_idx in h_row.index:
                 val_celula = str(h_row[col_idx])
