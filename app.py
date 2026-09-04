@@ -24,109 +24,149 @@ st.set_page_config(
     layout="wide"
 )
 
-# Estilização visual corporativa e regras de layout (inalterado)
-st.markdown("""
-    <style>
-    .main { background-color: #ffffff; }
-    h1 { color: #1f2c34; font-family: 'Helvetica Neue', sans-serif; margin-bottom: 5px; }
+# ==============================================================================
+# Tema visual (Claro / Escuro) — selecionável em ⚙️ Configurações.
+# A escolha fica em st.session_state['tema'] e é lida no topo do script a
+# cada execução, então a troca feita no seletor (mais abaixo, dentro do
+# expander) já se aplica no mesmo rerun.
+# ==============================================================================
+if 'tema' not in st.session_state:
+    st.session_state['tema'] = 'Claro'
 
-    .block-container {
+TEMAS = {
+    'Claro': dict(
+        main_bg='#ffffff', text='#1f2c34', body_text='#000000',
+        badge_bg='#e8f0fe', badge_text='#1967d2', badge_border='#d2e3fc',
+        expander_border='#d9d9d9', expander_bg='#ffffff', expander_header_bg='#f8f9fa',
+        footer_bg='#f8f9fa', footer_border='#2f5597', footer_text='#1f2c34',
+        th_bg='#2f5597', th_text='#ffffff', th_border='#b4c6e7',
+        td_border='#d9d9d9', td_text='#000000', row_bg='#ffffff',
+    ),
+    'Escuro': dict(
+        main_bg='#0e1117', text='#f5f5f5', body_text='#e6e6e6',
+        badge_bg='#1c2e4a', badge_text='#8ab4f8', badge_border='#2c4770',
+        expander_border='#333a45', expander_bg='#161a20', expander_header_bg='#1c212a',
+        footer_bg='#161a20', footer_border='#4f7cff', footer_text='#f5f5f5',
+        th_bg='#1f2a3f', th_text='#e8eef7', th_border='#3a4a66',
+        td_border='#2a2f38', td_text='#e6e6e6', row_bg='#161a20',
+    ),
+}
+
+
+def gerar_css(tema: str) -> str:
+    t = TEMAS.get(tema, TEMAS['Claro'])
+    return f"""
+    <style>
+    .main {{ background-color: {t['main_bg']}; }}
+    [data-testid="stAppViewContainer"], [data-testid="stHeader"] {{
+        background-color: {t['main_bg']} !important;
+    }}
+    body, p, span, label, .stMarkdown {{ color: {t['body_text']}; }}
+    h1 {{ color: {t['text']}; font-family: 'Helvetica Neue', sans-serif; margin-bottom: 5px; }}
+    h2, h3, h4 {{ color: {t['text']}; }}
+
+    .block-container {{
         padding-top: 1rem !important;
         padding-bottom: 150px !important;
         max-width: 100% !important;
-    }
-    header { visibility: hidden !important; }
-    #MainMenu { visibility: hidden !important; }
-    footer { visibility: hidden !important; }
-    div[data-baseweb="modal"], div.stDialog, div[role="dialog"] {
+    }}
+    header {{ visibility: hidden !important; }}
+    #MainMenu {{ visibility: hidden !important; }}
+    footer {{ visibility: hidden !important; }}
+    div[data-baseweb="modal"], div.stDialog, div[role="dialog"] {{
         display: none !important;
-    }
-    .status-badge {
-        background-color: #e8f0fe;
-        color: #1967d2;
+    }}
+    .status-badge {{
+        background-color: {t['badge_bg']};
+        color: {t['badge_text']};
         padding: 6px 12px;
         border-radius: 6px;
         font-size: 13px;
         font-weight: 600;
         font-family: 'Helvetica Neue', sans-serif;
-        border: 1px solid #d2e3fc;
-    }
-    div[data-testid="stExpander"] {
-        border: 1px solid #d9d9d9 !important;
-        background-color: #ffffff !important;
+        border: 1px solid {t['badge_border']};
+    }}
+    div[data-testid="stExpander"] {{
+        border: 1px solid {t['expander_border']} !important;
+        background-color: {t['expander_bg']} !important;
         border-radius: 6px !important;
         box-shadow: none !important;
         margin-bottom: 20px !important;
-    }
-    .streamlit-expanderHeader {
+    }}
+    .streamlit-expanderHeader {{
         padding-top: 8px !important;
         padding-bottom: 8px !important;
         min-height: 40px !important;
         font-size: 14px !important;
-        background-color: #f8f9fa !important;
+        background-color: {t['expander_header_bg']} !important;
         border-radius: 6px !important;
-    }
-    .streamlit-expanderContent {
+        color: {t['text']} !important;
+    }}
+    .streamlit-expanderContent {{
         padding: 15px !important;
-        background-color: #ffffff !important;
-    }
-    .footer-pesquisa {
+        background-color: {t['expander_bg']} !important;
+    }}
+    .footer-pesquisa {{
         position: fixed;
         bottom: 0;
         left: 0;
         width: 100%;
-        background-color: #f8f9fa;
-        border-top: 2px solid #2f5597;
+        background-color: {t['footer_bg']};
+        border-top: 2px solid {t['footer_border']};
         padding: 8px 20px;
         z-index: 99999;
         box-shadow: 0px -4px 10px rgba(0, 0, 0, 0.1);
-    }
+        color: {t['footer_text']};
+    }}
 
-    div[data-testid="stTextInput"] {
+    div[data-testid="stTextInput"] {{
         max-width: 400px !important;
-    }
-    .dataframe {
+    }}
+    .dataframe {{
         width: 100% !important;
         table-layout: auto !important;
         border-collapse: collapse !important;
         font-family: 'Helvetica Neue', sans-serif !important;
         font-size: 12px !important;
-    }
-    .dataframe th {
-        background-color: #2f5597 !important;
-        color: white !important;
+    }}
+    .dataframe th {{
+        background-color: {t['th_bg']} !important;
+        color: {t['th_text']} !important;
         text-align: center !important;
         font-weight: bold !important;
         padding: 8px 6px !important;
-        border: 1px solid #b4c6e7 !important;
+        border: 1px solid {t['th_border']} !important;
         font-size: 12px !important;
         white-space: nowrap !important;
-    }
-    .dataframe td {
+    }}
+    .dataframe td {{
         padding: 7px 6px !important;
-        border: 1px solid #d9d9d9 !important;
-        color: #000000 !important;
+        border: 1px solid {t['td_border']} !important;
+        color: {t['td_text']} !important;
         font-size: 12px !important;
         text-align: right;
-    }
+    }}
     .dataframe tr:nth-child(even),
-    .dataframe tr:nth-child(odd) {
-        background-color: #ffffff !important;
-    }
+    .dataframe tr:nth-child(odd) {{
+        background-color: {t['row_bg']} !important;
+    }}
     .dataframe td:nth-child(1), .dataframe th:nth-child(1),
-    .dataframe td:nth-child(2), .dataframe th:nth-child(2) {
+    .dataframe td:nth-child(2), .dataframe th:nth-child(2) {{
         white-space: nowrap !important;
         text-align: center !important;
-    }
-    .dataframe td:nth-child(3), .dataframe td:nth-child(6), .dataframe td:nth-child(8) {
+    }}
+    .dataframe td:nth-child(3), .dataframe td:nth-child(6), .dataframe td:nth-child(8) {{
         text-align: left;
-    }
-    .dataframe td:nth-child(11), .dataframe th:nth-child(11) {
+    }}
+    .dataframe td:nth-child(11), .dataframe th:nth-child(11) {{
         text-align: center !important;
         white-space: nowrap !important;
-    }
+    }}
     </style>
-""", unsafe_allow_html=True)
+    """
+
+
+st.markdown(gerar_css(st.session_state['tema']), unsafe_allow_html=True)
 
 # ==============================================================================
 # 1. BASE HISTÓRICA — mesma lógica da skill "analise-mapa-cotacao"
@@ -309,7 +349,21 @@ base_precos, historico_bruto, status_historico = construir_base_precos(
 # atualizar os preços históricos, atualize esse arquivo no repositório.
 # ==============================================================================
 with st.expander("⚙️ Abrir / Fechar Configurações (Upload e Exportação)", expanded=False):
-    col_exp1, col_exp2 = st.columns([3, 1])
+    col_exp0, col_exp1, col_exp2 = st.columns([1, 2, 1])
+
+    with col_exp0:
+        st.markdown("### 🎨 Tema")
+        opcoes_tema = list(TEMAS.keys())
+        tema_escolhido = st.radio(
+            "Aparência do painel",
+            options=opcoes_tema,
+            index=opcoes_tema.index(st.session_state['tema']),
+            key="seletor_tema",
+            horizontal=True,
+        )
+        if tema_escolhido != st.session_state['tema']:
+            st.session_state['tema'] = tema_escolhido
+            st.rerun()
 
     with col_exp1:
         st.markdown("### 📁 Upload do Mapa de Cotação")
