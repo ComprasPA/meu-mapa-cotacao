@@ -185,10 +185,31 @@ def limpar_valor(valor):
 def _ler_historico_bruto(caminho_historico: str) -> pd.DataFrame:
     """Lê o histórico de Pedidos de Compra, aceitando tanto .csv quanto
     .xlsx — mesmo layout em ambos os casos (título na linha 1, cabeçalho de
-    colunas na linha 2, export padrão TOTVS/Protheus)."""
-    if caminho_historico.lower().endswith('.csv'):
-        return pd.read_csv(caminho_historico, header=1)
-    return pd.read_excel(caminho_historico, header=1)
+    colunas na linha 2, export padrão TOTVS/Protheus).
+
+    O export brasileiro do TOTVS/Protheus normalmente sai em .csv com:
+      - ';' como separador de campo (porque ',' é o separador decimal);
+      - BOM no início do arquivo (necessita encoding 'utf-8-sig');
+      - números como texto, com separador de milhar '.' e decimal ','
+        (ex.: " 9.500,0000 ", com espaços — tratado depois por limpar_valor).
+    Tentamos ';' primeiro (caso mais comum) e caímos para ',' só se as
+    colunas esperadas não aparecerem — cobre também um CSV exportado no
+    padrão internacional (vírgula), como o simulado durante os testes.
+    """
+    if not caminho_historico.lower().endswith('.csv'):
+        return pd.read_excel(caminho_historico, header=1)
+
+    for sep in (';', ','):
+        try:
+            df = pd.read_csv(caminho_historico, header=1, sep=sep, encoding='utf-8-sig')
+        except Exception:
+            continue
+        if 'Produto' in df.columns and 'Prc Unitario' in df.columns:
+            return df
+    # Nenhuma tentativa achou as colunas esperadas — devolve a última leitura
+    # (com ',') para que a checagem de HIST_REQUIRED_COLS gere uma mensagem
+    # de erro clara para o usuário, em vez de travar aqui.
+    return pd.read_csv(caminho_historico, header=1, sep=',', encoding='utf-8-sig')
 
 
 def normalizar_codigo(valor):
