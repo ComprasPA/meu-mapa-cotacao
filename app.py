@@ -141,10 +141,54 @@ st.markdown("""
 # Produto exatamente como build_base_precos.py da skill.
 # ==============================================================================
 
-HISTORICO_PATH = "historico_compras.xlsx"
+HISTORICO_CSV_PATH = "historico_compras.csv"
+HISTORICO_XLSX_PATH = "historico_compras.xlsx"
 
 HIST_REQUIRED_COLS = ['Produto', 'Descricao.1', 'Unidade', 'Prc Unitario',
                        'Data Emissao', 'Nome Fornece', 'Quantidade', 'Status Aprov']
+
+
+def caminho_historico_ativo() -> str:
+    """O histórico pode estar como .csv (formato já publicado no GitHub) ou
+    .xlsx (formato original do export). Se os dois existirem, usa o mais
+    recente — normalmente o último que foi enviado pela tela de
+    Configurações."""
+    candidatos = [p for p in (HISTORICO_CSV_PATH, HISTORICO_XLSX_PATH) if os.path.exists(p)]
+    if not candidatos:
+        return HISTORICO_CSV_PATH
+    return max(candidatos, key=os.path.getmtime)
+
+
+def limpar_valor(valor):
+    if pd.isna(valor) or valor is None:
+        return 0.0
+    val_str = str(valor).replace('R$', '').strip()
+    if not val_str or val_str.lower() in ['nan', 'total item', 'total', '##########', 'a vista', '25 dias', 'item', 'código', 'produto', 'descrição']:
+        return 0.0
+
+    if '.' in val_str and ',' in val_str:
+        if val_str.find('.') < val_str.find(','):
+            val_str = val_str.replace('.', '').replace(',', '.')
+        else:
+            val_str = val_str.replace(',', '')
+    elif ',' in val_str:
+        val_str = val_str.replace('.', '').replace(',', '.')
+    elif val_str.count('.') > 1:
+        val_str = val_str.replace('.', '')
+
+    try:
+        return float(val_str)
+    except Exception:
+        return 0.0
+
+
+def _ler_historico_bruto(caminho_historico: str) -> pd.DataFrame:
+    """Lê o histórico de Pedidos de Compra, aceitando tanto .csv quanto
+    .xlsx — mesmo layout em ambos os casos (título na linha 1, cabeçalho de
+    colunas na linha 2, export padrão TOTVS/Protheus)."""
+    if caminho_historico.lower().endswith('.csv'):
+        return pd.read_csv(caminho_historico, header=1)
+    return pd.read_excel(caminho_historico, header=1)
 
 
 def normalizar_codigo(valor):
@@ -180,7 +224,7 @@ def construir_base_precos(caminho_historico: str, mtime: float, status_filtro: s
         return pd.DataFrame(), pd.DataFrame(), "Base de dados indisponível — envie o histórico de PC em ⚙️ Configurações"
 
     try:
-        df = pd.read_excel(caminho_historico, header=1)
+        df = _ler_historico_bruto(caminho_historico)
     except Exception as e:
         return pd.DataFrame(), pd.DataFrame(), f"Erro ao ler histórico: {e}"
 
@@ -196,7 +240,16 @@ def construir_base_precos(caminho_historico: str, mtime: float, status_filtro: s
     else:
         df_f = df.copy()
 
-    df_f = df_f[df_f['Prc Unitario'].notna() & df_f['Produto'].notna()].copy()
+    # Coerção defensiva: se o CSV/XLSX vier com preço em formato BR
+    # ("1.234,56") ou como texto, limpar_valor normaliza; se já vier
+    # numérico (caso comum quando exportado do Excel), pd.to_numeric resolve
+    # sem precisar reprocessar linha a linha.
+    if not pd.api.types.is_numeric_dtype(df_f['Prc Unitario']):
+        df_f['Prc Unitario'] = df_f['Prc Unitario'].apply(limpar_valor)
+    if not pd.api.types.is_numeric_dtype(df_f['Quantidade']):
+        df_f['Quantidade'] = df_f['Quantidade'].apply(limpar_valor)
+
+    df_f = df_f[df_f['Prc Unitario'].notna() & (df_f['Prc Unitario'] > 0) & df_f['Produto'].notna()].copy()
     df_f['Data Emissao'] = pd.to_datetime(df_f['Data Emissao'], errors='coerce', dayfirst=True)
     df_f['Cod_Norm'] = df_f['Produto'].apply(normalizar_codigo)
     df_f = df_f.dropna(subset=['Cod_Norm']).sort_values('Data Emissao')
@@ -234,8 +287,9 @@ def _mtime_or_zero(path):
     return os.path.getmtime(path) if os.path.exists(path) else 0.0
 
 
+_historico_path_atual = caminho_historico_ativo()
 base_precos, historico_bruto, status_historico = construir_base_precos(
-    HISTORICO_PATH, _mtime_or_zero(HISTORICO_PATH)
+    _historico_path_atual, _mtime_or_zero(_historico_path_atual)
 )
 
 # ==============================================================================
@@ -248,10 +302,11 @@ with st.expander("⚙️ Abrir / Fechar Configurações (Upload e Exportação)"
         st.markdown("### 🔄 Atualizar Base Histórica")
         st.caption('Envie sempre que tiver um histórico de Pedidos de Compra mais recente ("Segue base atualizada até hoje").')
         uploaded_hist = st.file_uploader(
-            "Histórico de Pedidos de Compra (.xlsx)", type=["xlsx"], key="upload_historico"
+            "Histórico de Pedidos de Compra (.csv ou .xlsx)", type=["csv", "xlsx"], key="upload_historico"
         )
         if uploaded_hist is not None:
-            with open(HISTORICO_PATH, "wb") as f:
+            destino = HISTORICO_CSV_PATH if uploaded_hist.name.lower().endswith('.csv') else HISTORICO_XLSX_PATH
+            with open(destino, "wb") as f:
                 f.write(uploaded_hist.getbuffer())
             st.cache_data.clear()
             st.success("Base histórica recebida e reconstruída (todos os status considerados).")
@@ -283,27 +338,6 @@ st.markdown("---")
 # ==============================================================================
 # Funções de Conversão e Formatação (inalteradas)
 # ==============================================================================
-def limpar_valor(valor):
-    if pd.isna(valor) or valor is None:
-        return 0.0
-    val_str = str(valor).replace('R$', '').strip()
-    if not val_str or val_str.lower() in ['nan', 'total item', 'total', '##########', 'a vista', '25 dias', 'item', 'código', 'produto', 'descrição']:
-        return 0.0
-
-    if '.' in val_str and ',' in val_str:
-        if val_str.find('.') < val_str.find(','):
-            val_str = val_str.replace('.', '').replace(',', '.')
-        else:
-            val_str = val_str.replace(',', '')
-    elif ',' in val_str:
-        val_str = val_str.replace('.', '').replace(',', '.')
-    elif val_str.count('.') > 1:
-        val_str = val_str.replace('.', '')
-
-    try:
-        return float(val_str)
-    except Exception:
-        return 0.0
 
 
 def formatar_brl(valor):
