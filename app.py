@@ -109,9 +109,7 @@ st.markdown("""
         font-size: 12px !important;
         text-align: right;
     }
-    .dataframe tr:nth-child(even) {
-        background-color: #f2f5f9 !important;
-    }
+    .dataframe tr:nth-child(even),
     .dataframe tr:nth-child(odd) {
         background-color: #ffffff !important;
     }
@@ -141,22 +139,13 @@ st.markdown("""
 # Produto exatamente como build_base_precos.py da skill.
 # ==============================================================================
 
-HISTORICO_CSV_PATH = "historico_compras.csv"
-HISTORICO_XLSX_PATH = "historico_compras.xlsx"
+# Único arquivo-fonte: o historico_compras.csv versionado no repositório do
+# GitHub, sempre no mesmo diretório do app.py. Não há upload/edição pelo
+# painel — para atualizar a base, atualize o arquivo no repositório.
+HISTORICO_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "historico_compras.csv")
 
 HIST_REQUIRED_COLS = ['Produto', 'Descricao.1', 'Unidade', 'Prc Unitario',
                        'Data Emissao', 'Nome Fornece', 'Quantidade', 'Status Aprov']
-
-
-def caminho_historico_ativo() -> str:
-    """O histórico pode estar como .csv (formato já publicado no GitHub) ou
-    .xlsx (formato original do export). Se os dois existirem, usa o mais
-    recente — normalmente o último que foi enviado pela tela de
-    Configurações."""
-    candidatos = [p for p in (HISTORICO_CSV_PATH, HISTORICO_XLSX_PATH) if os.path.exists(p)]
-    if not candidatos:
-        return HISTORICO_CSV_PATH
-    return max(candidatos, key=os.path.getmtime)
 
 
 def limpar_valor(valor):
@@ -196,9 +185,6 @@ def _ler_historico_bruto(caminho_historico: str) -> pd.DataFrame:
     colunas esperadas não aparecerem — cobre também um CSV exportado no
     padrão internacional (vírgula), como o simulado durante os testes.
     """
-    if not caminho_historico.lower().endswith('.csv'):
-        return pd.read_excel(caminho_historico, header=1)
-
     for sep in (';', ','):
         try:
             df = pd.read_csv(caminho_historico, header=1, sep=sep, encoding='utf-8-sig')
@@ -242,7 +228,10 @@ def construir_base_precos(caminho_historico: str, mtime: float, status_filtro: s
         status_msg: texto para o badge de status no topo da página
     """
     if not os.path.exists(caminho_historico):
-        return pd.DataFrame(), pd.DataFrame(), "Base de dados indisponível — envie o histórico de PC em ⚙️ Configurações"
+        return pd.DataFrame(), pd.DataFrame(), (
+            f"Base de dados indisponível — arquivo '{os.path.basename(caminho_historico)}' "
+            "não encontrado no repositório."
+        )
 
     try:
         df = _ler_historico_bruto(caminho_historico)
@@ -308,30 +297,19 @@ def _mtime_or_zero(path):
     return os.path.getmtime(path) if os.path.exists(path) else 0.0
 
 
-_historico_path_atual = caminho_historico_ativo()
 base_precos, historico_bruto, status_historico = construir_base_precos(
-    _historico_path_atual, _mtime_or_zero(_historico_path_atual)
+    HISTORICO_PATH, _mtime_or_zero(HISTORICO_PATH)
 )
 
 # ==============================================================================
-# Cabeçalho + Configurações (upload de histórico e de mapa de cotação)
+# Cabeçalho + Configurações (upload do mapa de cotação e exportação)
+#
+# A base histórica não é mais editável pelo painel — ela vem exclusivamente
+# do historico_compras.csv versionado no repositório do GitHub. Para
+# atualizar os preços históricos, atualize esse arquivo no repositório.
 # ==============================================================================
 with st.expander("⚙️ Abrir / Fechar Configurações (Upload e Exportação)", expanded=False):
-    col_exp0, col_exp1, col_exp2 = st.columns([2, 2, 1])
-
-    with col_exp0:
-        st.markdown("### 🔄 Atualizar Base Histórica")
-        st.caption('Envie sempre que tiver um histórico de Pedidos de Compra mais recente ("Segue base atualizada até hoje").')
-        uploaded_hist = st.file_uploader(
-            "Histórico de Pedidos de Compra (.csv ou .xlsx)", type=["csv", "xlsx"], key="upload_historico"
-        )
-        if uploaded_hist is not None:
-            destino = HISTORICO_CSV_PATH if uploaded_hist.name.lower().endswith('.csv') else HISTORICO_XLSX_PATH
-            with open(destino, "wb") as f:
-                f.write(uploaded_hist.getbuffer())
-            st.cache_data.clear()
-            st.success("Base histórica recebida e reconstruída (todos os status considerados).")
-            st.rerun()
+    col_exp1, col_exp2 = st.columns([3, 1])
 
     with col_exp1:
         st.markdown("### 📁 Upload do Mapa de Cotação")
