@@ -376,15 +376,7 @@ with st.expander("⚙️ Abrir / Fechar Configurações (Upload e Exportação)"
         placeholder_pdf = st.empty()
         placeholder_xlsx = st.empty()
 
-col_title, col_status = st.columns([7, 3])
-with col_title:
-    st.title("📊 Gestão Estratégica de Compras | Mapa de Cotação")
-with col_status:
-    st.markdown(
-        f"<div style='text-align: right; margin-top: 15px;'>"
-        f"<span class='status-badge'>ℹ️ {status_historico}</span></div>",
-        unsafe_allow_html=True
-    )
+st.title("📊 Gestão Estratégica de Compras | Mapa de Cotação")
 st.markdown("---")
 
 
@@ -1087,3 +1079,9 @@ if codigo_pesquisa:
                 )
 
                 st.plotly_chart(fig, use_container_width=True)
+
+st.markdown(
+    f"<div style='text-align: center; margin-top: 30px;'>"
+    f"<span class='status-badge'>ℹ️ {status_historico}</span></div>",
+    unsafe_allow_html=True
+)
