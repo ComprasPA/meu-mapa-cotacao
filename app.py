@@ -1024,7 +1024,7 @@ if not df_final.empty:
     """)
 
     t_grid = TEMAS.get(st.session_state['tema'], TEMAS['Claro'])
-    tema_aggrid = 'alpine-dark' if st.session_state['tema'] == 'Escuro' else 'alpine'
+    tema_aggrid = 'dark' if st.session_state['tema'] == 'Escuro' else 'light'
 
     # Garante que nenhum texto fique cortado: cabeçalho e célula quebram
     # linha e crescem em altura (em vez de truncar com "..."), e a largura
