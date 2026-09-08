@@ -1026,8 +1026,26 @@ if not df_final.empty:
     t_grid = TEMAS.get(st.session_state['tema'], TEMAS['Claro'])
     tema_aggrid = 'alpine-dark' if st.session_state['tema'] == 'Escuro' else 'alpine'
 
+    # Garante que nenhum texto fique cortado: cabeçalho e célula quebram
+    # linha e crescem em altura (em vez de truncar com "..."), e a largura
+    # inicial de cada coluna é recalculada para caber no conteúdo.
+    autosize_ao_carregar = JsCode("""
+        function(params) {
+            var ids = [];
+            var cols = (params.api.getColumns ? params.api.getColumns() : params.columnApi.getAllColumns());
+            cols.forEach(function(c) { ids.push(c.getId()); });
+            if (params.api.autoSizeColumns) { params.api.autoSizeColumns(ids, false); }
+            else if (params.columnApi && params.columnApi.autoSizeColumns) { params.columnApi.autoSizeColumns(ids, false); }
+        }
+    """)
+
     gb = GridOptionsBuilder.from_dataframe(df_grid)
-    gb.configure_default_column(sortable=True, filter=True, resizable=True)
+    gb.configure_default_column(
+        sortable=True, filter=True, resizable=True,
+        wrapText=True, autoHeight=True,
+        wrapHeaderText=True, autoHeaderHeight=True,
+    )
+    gb.configure_grid_options(onFirstDataRendered=autosize_ao_carregar)
     gb.configure_column('Item', width=70, cellStyle={'textAlign': 'center'})
     gb.configure_column('Código', width=100, cellStyle={'textAlign': 'center'})
     gb.configure_column('Descrição', width=260, cellStyle={'textAlign': 'left'})
@@ -1052,7 +1070,6 @@ if not df_final.empty:
         gridOptions=grid_options,
         theme=tema_aggrid,
         height=600,
-        fit_columns_on_grid_load=False,
         allow_unsafe_jscode=True,
         custom_css={
             ".ag-header-cell-label": {"font-weight": "bold", "justify-content": "center"},
