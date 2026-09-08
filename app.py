@@ -62,9 +62,9 @@ def gerar_css(tema: str) -> str:
     [data-testid="stAppViewContainer"], [data-testid="stHeader"] {{
         background-color: {t['main_bg']} !important;
     }}
-    body, p, span, label, .stMarkdown {{ color: {t['body_text']}; }}
-    h1 {{ color: {t['text']}; font-family: 'Helvetica Neue', sans-serif; margin-bottom: 5px; }}
-    h2, h3, h4 {{ color: {t['text']}; }}
+    body, p, span, label, .stMarkdown {{ color: {t['body_text']} !important; }}
+    h1 {{ color: {t['text']} !important; font-family: 'Helvetica Neue', sans-serif; margin-bottom: 5px; }}
+    h2, h3, h4 {{ color: {t['text']} !important; }}
 
     .block-container {{
         padding-top: 1rem !important;
@@ -76,6 +76,11 @@ def gerar_css(tema: str) -> str:
     footer {{ visibility: hidden !important; }}
     div[data-baseweb="modal"], div.stDialog, div[role="dialog"] {{
         display: none !important;
+    }}
+    button[data-testid^="stBaseButton"] {{
+        background-color: {t['expander_header_bg']} !important;
+        border: 1px solid {t['expander_border']} !important;
+        color: {t['text']} !important;
     }}
     .status-badge {{
         background-color: {t['badge_bg']};
@@ -94,7 +99,8 @@ def gerar_css(tema: str) -> str:
         box-shadow: none !important;
         margin-bottom: 20px !important;
     }}
-    .streamlit-expanderHeader {{
+    .streamlit-expanderHeader,
+    div[data-testid="stExpander"] summary {{
         padding-top: 8px !important;
         padding-bottom: 8px !important;
         min-height: 40px !important;
@@ -103,7 +109,8 @@ def gerar_css(tema: str) -> str:
         border-radius: 6px !important;
         color: {t['text']} !important;
     }}
-    .streamlit-expanderContent {{
+    .streamlit-expanderContent,
+    div[data-testid="stExpander"] summary ~ div {{
         padding: 15px !important;
         background-color: {t['expander_bg']} !important;
     }}
