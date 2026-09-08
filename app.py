@@ -352,19 +352,20 @@ base_precos, historico_bruto, status_historico = construir_base_precos(
 # do historico_compras.csv versionado no repositório do GitHub. Para
 # atualizar os preços históricos, atualize esse arquivo no repositório.
 # ==============================================================================
+st.title("📊 Gestão Estratégica de Compras | Mapa de Cotação")
+
 with st.expander("⚙️ Abrir / Fechar Configurações (Upload e Exportação)", expanded=False):
     col_exp0, col_exp1, col_exp2 = st.columns([1, 2, 1])
 
     with col_exp0:
         st.markdown("### 🎨 Tema")
-        opcoes_tema = list(TEMAS.keys())
-        tema_escolhido = st.radio(
-            "Aparência do painel",
-            options=opcoes_tema,
-            index=opcoes_tema.index(st.session_state['tema']),
+        modo_escuro = st.toggle(
+            "☀️ / 🌙",
+            value=(st.session_state['tema'] == 'Escuro'),
             key="seletor_tema",
-            horizontal=True,
+            help="Alternar entre tema claro e escuro",
         )
+        tema_escolhido = "Escuro" if modo_escuro else "Claro"
         if tema_escolhido != st.session_state['tema']:
             st.session_state['tema'] = tema_escolhido
             st.rerun()
@@ -380,7 +381,6 @@ with st.expander("⚙️ Abrir / Fechar Configurações (Upload e Exportação)"
         placeholder_pdf = st.empty()
         placeholder_xlsx = st.empty()
 
-st.title("📊 Gestão Estratégica de Compras | Mapa de Cotação")
 st.markdown("---")
 
 
