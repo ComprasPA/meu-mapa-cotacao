@@ -14,6 +14,7 @@ import plotly.express as px
 from openpyxl import Workbook
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from openpyxl.utils import get_column_letter
+from st_aggrid import AgGrid, GridOptionsBuilder, JsCode
 
 # ==============================================================================
 # Configuração da Página
@@ -325,11 +326,7 @@ def construir_base_precos(caminho_historico: str, mtime: float, status_filtro: s
     base_precos = ultimo.merge(agg, on='Cod_Norm', how='left')
 
     data_mod = datetime.datetime.fromtimestamp(mtime).strftime('%d/%m/%Y %H:%M')
-    status_msg = (
-        f"Base atualizada em: {data_mod} · {base_precos['Cod_Norm'].nunique()} itens únicos "
-        f"({len(df_f)} de {len(df)} registros considerados"
-        f"{' — apenas ' + status_filtro if status_filtro else ' — todos os status'})"
-    )
+    status_msg = f"Base atualizada em: {data_mod}"
     return base_precos, df_f, status_msg
 
 
@@ -951,19 +948,6 @@ if not cotacao.empty:
         df_final = df_merge[colunas_exatas]
 
 if not df_final.empty:
-    df_display = df_final.copy()
-    df_display['Qtd'] = df_display['Qtd'].apply(formatar_qtd)
-    df_display['Valor Cotado (R$)'] = df_display['Valor Cotado (R$)'].apply(formatar_brl)
-    df_display['Último Preço Pago (R$)'] = df_display['Último Preço Pago (R$)'].apply(formatar_brl)
-    df_display['Preço Médio (R$)'] = df_display['Preço Médio (R$)'].apply(formatar_brl)
-    df_display['Preço Mín. Histórico (R$)'] = df_display['Preço Mín. Histórico (R$)'].apply(formatar_brl)
-    df_display['Preço Máx. Histórico (R$)'] = df_display['Preço Máx. Histórico (R$)'].apply(formatar_brl)
-    df_display['Data Última Compra'] = df_display['Data Última Compra'].apply(
-        lambda d: pd.to_datetime(d).strftime('%d/%m/%Y') if d != "" and pd.notna(d) else ""
-    )
-    df_display['Var. vs Último (%)'] = df_final['Var. vs Último (%)'].apply(formatar_pct_com_seta)
-    df_display['Var. vs Médio (%)'] = df_final['Var. vs Médio (%)'].apply(formatar_pct_com_seta)
-
     st.subheader("📋 Mapa de Cotação Consolidado & Comparativo Histórico")
 
     if aviso_valores_estranhos:
@@ -979,8 +963,103 @@ if not df_final.empty:
         st.info(f"ℹ️ {n_sem_historico} item(ns) sem correspondência no histórico de compras — "
                 f"nenhum preço de referência foi inventado para eles.")
 
-    html_tabela = df_display.to_html(escape=False, index=False, classes='dataframe')
-    st.markdown(html_tabela, unsafe_allow_html=True)
+    # ==========================================================================
+    # Grade interativa (ordenação e filtro por coluna, ao estilo Excel)
+    #
+    # A grade recebe os valores brutos (numéricos/data), não as strings já
+    # formatadas — assim ordenar e filtrar funciona pelo valor real (ex.:
+    # maior/menor preço, faixa de variação %), e a formatação em R$/%% fica
+    # só na exibição, via valueFormatter.
+    # ==========================================================================
+    colunas_moeda = ['Valor Cotado (R$)', 'Último Preço Pago (R$)', 'Preço Médio (R$)',
+                      'Preço Mín. Histórico (R$)', 'Preço Máx. Histórico (R$)']
+    colunas_pct = ['Var. vs Último (%)', 'Var. vs Médio (%)']
+
+    df_grid = df_final.copy()
+    for col in colunas_moeda + colunas_pct:
+        df_grid[col] = pd.to_numeric(df_grid[col].replace("", np.nan), errors='coerce')
+    df_grid['Data Última Compra'] = pd.to_datetime(
+        df_grid['Data Última Compra'].replace("", np.nan), errors='coerce'
+    ).dt.strftime('%Y-%m-%d')
+
+    formatter_moeda = JsCode("""
+        function(params) {
+            if (params.value === null || params.value === undefined) { return ''; }
+            return 'R$ ' + Number(params.value).toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+        }
+    """)
+    formatter_qtd = JsCode("""
+        function(params) {
+            if (params.value === null || params.value === undefined) { return ''; }
+            var v = Number(params.value);
+            var casas = Number.isInteger(v) ? 0 : 2;
+            return v.toLocaleString('pt-BR', {minimumFractionDigits: casas, maximumFractionDigits: casas});
+        }
+    """)
+    formatter_data = JsCode("""
+        function(params) {
+            if (!params.value) { return ''; }
+            var p = params.value.split('-');
+            return p[2] + '/' + p[1] + '/' + p[0];
+        }
+    """)
+    formatter_pct = JsCode("""
+        function(params) {
+            if (params.value === null || params.value === undefined) { return ''; }
+            var v = Number(params.value);
+            var txt = (v > 0 ? '+' : '') + v.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2}) + '%';
+            if (v > 0) { return '↑ ' + txt; }
+            if (v < 0) { return '↓ ' + txt; }
+            return txt;
+        }
+    """)
+    cellstyle_pct = JsCode("""
+        function(params) {
+            if (params.value === null || params.value === undefined) { return {}; }
+            var v = Number(params.value);
+            if (v > 0) { return {color: '#c00000', fontWeight: 900}; }
+            if (v < 0) { return {color: '#2ca02c', fontWeight: 900}; }
+            return {color: '#555555', fontWeight: 'bold'};
+        }
+    """)
+
+    t_grid = TEMAS.get(st.session_state['tema'], TEMAS['Claro'])
+    tema_aggrid = 'alpine-dark' if st.session_state['tema'] == 'Escuro' else 'alpine'
+
+    gb = GridOptionsBuilder.from_dataframe(df_grid)
+    gb.configure_default_column(sortable=True, filter=True, resizable=True, floatingFilter=True)
+    gb.configure_column('Item', width=70, cellStyle={'textAlign': 'center'})
+    gb.configure_column('Código', width=100, cellStyle={'textAlign': 'center'})
+    gb.configure_column('Descrição', width=260, cellStyle={'textAlign': 'left'})
+    gb.configure_column('Unidade', width=90, cellStyle={'textAlign': 'center'})
+    gb.configure_column('Qtd', type=['numericColumn'], valueFormatter=formatter_qtd,
+                         cellStyle={'textAlign': 'right'}, width=90)
+    gb.configure_column('Fornecedor Cotado', width=200, cellStyle={'textAlign': 'left'})
+    for col in colunas_moeda:
+        gb.configure_column(col, type=['numericColumn'], valueFormatter=formatter_moeda,
+                             cellStyle={'textAlign': 'right'}, width=150)
+    gb.configure_column('Data Última Compra', valueFormatter=formatter_data,
+                         cellStyle={'textAlign': 'center'}, width=130)
+    gb.configure_column('Fornecedor Última Compra', width=200, cellStyle={'textAlign': 'left'})
+    for col in colunas_pct:
+        gb.configure_column(col, type=['numericColumn'], valueFormatter=formatter_pct,
+                             cellStyle=cellstyle_pct, width=140)
+    gb.configure_column('Observação', width=180, cellStyle={'textAlign': 'center'})
+    grid_options = gb.build()
+
+    AgGrid(
+        df_grid,
+        gridOptions=grid_options,
+        theme=tema_aggrid,
+        height=600,
+        fit_columns_on_grid_load=False,
+        allow_unsafe_jscode=True,
+        custom_css={
+            ".ag-header-cell-label": {"font-weight": "bold", "justify-content": "center"},
+            ".ag-cell": {"font-size": "12px"},
+        },
+        key="grid_mapa_cotacao",
+    )
 
     pdf_bytes = gerar_pdf(df_final)
     placeholder_pdf.download_button(
