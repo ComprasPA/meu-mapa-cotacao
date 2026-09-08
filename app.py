@@ -1026,26 +1026,14 @@ if not df_final.empty:
     t_grid = TEMAS.get(st.session_state['tema'], TEMAS['Claro'])
     tema_aggrid = 'dark' if st.session_state['tema'] == 'Escuro' else 'light'
 
-    # Garante que nenhum texto fique cortado: cabeçalho e célula quebram
-    # linha e crescem em altura (em vez de truncar com "..."), e a largura
-    # inicial de cada coluna é recalculada para caber no conteúdo.
-    autosize_ao_carregar = JsCode("""
-        function(params) {
-            var ids = [];
-            var cols = (params.api.getColumns ? params.api.getColumns() : params.columnApi.getAllColumns());
-            cols.forEach(function(c) { ids.push(c.getId()); });
-            if (params.api.autoSizeColumns) { params.api.autoSizeColumns(ids, false); }
-            else if (params.columnApi && params.columnApi.autoSizeColumns) { params.columnApi.autoSizeColumns(ids, false); }
-        }
-    """)
-
     gb = GridOptionsBuilder.from_dataframe(df_grid)
-    gb.configure_default_column(
-        sortable=True, filter=True, resizable=True,
-        wrapText=True, autoHeight=True,
-        wrapHeaderText=True, autoHeaderHeight=True,
-    )
-    gb.configure_grid_options(onFirstDataRendered=autosize_ao_carregar)
+    gb.configure_default_column(sortable=True, filter=True, resizable=True)
+    # GridOptionsBuilder.from_dataframe já define autoSizeStrategy
+    # "fitGridWidth" (estica as colunas pra preencher a tela, espremendo o
+    # texto). Sobrescreve para "fitCellContents": cada coluna (cabeçalho e
+    # célula, numa linha só) fica larga o suficiente pro maior conteúdo,
+    # sem cortar nem quebrar linha — sobra vira rolagem horizontal.
+    gb.configure_grid_options(autoSizeStrategy={"type": "fitCellContents"})
     gb.configure_column('Item', width=70, cellStyle={'textAlign': 'center'})
     gb.configure_column('Código', width=100, cellStyle={'textAlign': 'center'})
     gb.configure_column('Descrição', width=260, cellStyle={'textAlign': 'left'})
