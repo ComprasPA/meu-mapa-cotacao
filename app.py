@@ -1027,7 +1027,7 @@ if not df_final.empty:
     tema_aggrid = 'alpine-dark' if st.session_state['tema'] == 'Escuro' else 'alpine'
 
     gb = GridOptionsBuilder.from_dataframe(df_grid)
-    gb.configure_default_column(sortable=True, filter=True, resizable=True, floatingFilter=True)
+    gb.configure_default_column(sortable=True, filter=True, resizable=True)
     gb.configure_column('Item', width=70, cellStyle={'textAlign': 'center'})
     gb.configure_column('Código', width=100, cellStyle={'textAlign': 'center'})
     gb.configure_column('Descrição', width=260, cellStyle={'textAlign': 'left'})
