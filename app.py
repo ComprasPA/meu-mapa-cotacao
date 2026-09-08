@@ -44,8 +44,11 @@ TEMAS = {
         th_bg='#2f5597', th_text='#ffffff', th_border='#b4c6e7',
         td_border='#d9d9d9', td_text='#000000', row_bg='#ffffff',
         # Cores da marca Parente Andrade — mesma paleta do Portal Gestão de
-        # Compras (comum.py: TEMAS['claro']), usadas só no cabeçalho.
-        verde='#3E8E41', verde_deep='#2E6B31', laranja='#F2861D', laranja_deep='#CE6E10',
+        # Compras (comum.py: TEMAS['claro']), usadas no cabeçalho e nas
+        # caixas/botões (input_bg, mist, verde_soft).
+        verde='#3E8E41', verde_deep='#2E6B31', verde_soft='#E7F3E6',
+        laranja='#F2861D', laranja_deep='#CE6E10',
+        input_bg='#F1F2EE', mist='#E4E7E0',
     ),
     'Escuro': dict(
         main_bg='#0e1117', text='#f5f5f5', body_text='#e6e6e6',
@@ -54,7 +57,9 @@ TEMAS = {
         footer_bg='#161a20', footer_border='#4f7cff', footer_text='#f5f5f5',
         th_bg='#1f2a3f', th_text='#e8eef7', th_border='#3a4a66',
         td_border='#2a2f38', td_text='#e6e6e6', row_bg='#161a20',
-        verde='#4FA653', verde_deep='#3E8E41', laranja='#F2951D', laranja_deep='#CE6E10',
+        verde='#4FA653', verde_deep='#3E8E41', verde_soft='#1F3B22',
+        laranja='#F2951D', laranja_deep='#CE6E10',
+        input_bg='#2A342E', mist='#3B4A42',
     ),
 }
 
@@ -112,8 +117,21 @@ def gerar_css(tema: str) -> str:
     }}
     button[data-testid^="stBaseButton"] {{
         background-color: {t['expander_header_bg']} !important;
-        border: 1px solid {t['expander_border']} !important;
+        border: 1px solid {t['mist']} !important;
+        border-radius: 7px !important;
         color: {t['text']} !important;
+        font-weight: 600 !important;
+    }}
+    div[data-testid="stTextInput"] input {{
+        background-color: {t['input_bg']} !important;
+        border: none !important;
+        border-radius: 9px !important;
+        box-shadow: none !important;
+        color: {t['text']} !important;
+        transition: background-color 0.2s;
+    }}
+    div[data-testid="stTextInput"] input:focus {{
+        background-color: {t['verde_soft']} !important;
     }}
     .status-badge {{
         background-color: {t['badge_bg']};
@@ -126,10 +144,10 @@ def gerar_css(tema: str) -> str:
         border: 1px solid {t['badge_border']};
     }}
     div[data-testid="stExpander"] {{
-        border: 1px solid {t['expander_border']} !important;
+        border: 1px solid {t['mist']} !important;
         background-color: {t['expander_bg']} !important;
-        border-radius: 6px !important;
-        box-shadow: none !important;
+        border-radius: 16px !important;
+        box-shadow: 0 1px 2px rgba(28,36,32,.04), 0 10px 28px -14px rgba(28,36,32,.14) !important;
         margin-bottom: 20px !important;
     }}
     .streamlit-expanderHeader,
@@ -139,7 +157,7 @@ def gerar_css(tema: str) -> str:
         min-height: 40px !important;
         font-size: 14px !important;
         background-color: {t['expander_header_bg']} !important;
-        border-radius: 6px !important;
+        border-radius: 16px 16px 0 0 !important;
         color: {t['text']} !important;
     }}
     .streamlit-expanderContent,
@@ -1153,8 +1171,6 @@ if not df_final.empty:
     )
 elif uploaded_cot is not None:
     st.warning("⚠️ Nenhum item válido encontrado no arquivo carregado.")
-else:
-    st.info("👆 Clique na caixa **⚙️ Abrir / Fechar Configurações** acima e faça o upload do seu Mapa de Cotação (.csv, .xlsx, .docx ou .mhtml) caso queira analisar um mapa completo.")
 
 st.markdown("---")
 
