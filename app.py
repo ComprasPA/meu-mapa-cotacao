@@ -102,7 +102,7 @@ def gerar_css(tema: str) -> str:
     }}
     body, p, span, label, .stMarkdown {{ color: {t['body_text']} !important; }}
     h1 {{ color: {t['text']} !important; font-family: 'Helvetica Neue', sans-serif; margin-bottom: 5px; }}
-    h2, h3, h4 {{ color: {t['text']} !important; }}
+    h2, h3, h4, h5, h6 {{ color: {t['text']} !important; }}
 
     .block-container {{
         padding-top: 1rem !important;
@@ -117,10 +117,15 @@ def gerar_css(tema: str) -> str:
     }}
     button[data-testid^="stBaseButton"] {{
         background-color: {t['expander_header_bg']} !important;
-        border: 1px solid {t['mist']} !important;
+        border: 1px solid {t['expander_border']} !important;
         border-radius: 7px !important;
         color: {t['text']} !important;
         font-weight: 600 !important;
+        box-shadow: 0 1px 2px rgba(28,36,32,.08) !important;
+    }}
+    button[data-testid^="stBaseButton"]:hover {{
+        border-color: {t['verde']} !important;
+        color: {t['verde']} !important;
     }}
     div[data-testid="stTextInput"] input {{
         background-color: {t['input_bg']} !important;
@@ -226,8 +231,11 @@ def gerar_css(tema: str) -> str:
 
 
 @st.cache_data(ttl=86400)
-def get_base64_logo():
-    caminho_logo = os.path.join(os.path.dirname(os.path.abspath(__file__)), "logo.png")
+def get_base64_logo(tema: str):
+    # No tema Escuro usa a variante com o texto "PARENTE ANDRADE" em
+    # branco (logo_dark.png) — o "PA" verde/laranja é o mesmo nas duas.
+    nome_arquivo = "logo_dark.png" if tema == "Escuro" else "logo.png"
+    caminho_logo = os.path.join(os.path.dirname(os.path.abspath(__file__)), nome_arquivo)
     try:
         with open(caminho_logo, "rb") as f:
             return base64.b64encode(f.read()).decode()
@@ -416,7 +424,7 @@ base_precos, historico_bruto, status_historico = construir_base_precos(
 # Cabeçalho com marca — mesmo padrão do Portal Gestão de Compras
 # (comum.py: renderizar_cabecalho): logo + "Coordenação de Suprimentos" +
 # título, com o alternador de tema no canto direito do cartão.
-base64_logo = get_base64_logo()
+base64_logo = get_base64_logo(st.session_state['tema'])
 with st.container(key="header_card"):
     c1, c2, c3 = st.columns([1.5, 6.0, 1.5])
     with c1:
@@ -451,15 +459,16 @@ with st.expander("⚙️ Abrir / Fechar Configurações (Upload e Exportação)"
     col_exp1, col_exp2 = st.columns([2, 1])
 
     with col_exp1:
-        st.markdown("### 📁 Upload do Mapa de Cotação")
+        st.markdown("##### 📁 Upload do Mapa de Cotação")
         uploaded_cot = st.file_uploader(
             "Carregar Mapa de Cotação (.csv, .xlsx, .docx ou .mhtml)",
             type=["csv", "xlsx", "docx", "mhtml", "html"]
         )
     with col_exp2:
-        st.markdown("### 📥 Exportar")
-        placeholder_pdf = st.empty()
-        placeholder_xlsx = st.empty()
+        st.markdown("##### 📥 Exportar")
+        col_pdf, col_xlsx = st.columns(2)
+        placeholder_pdf = col_pdf.empty()
+        placeholder_xlsx = col_xlsx.empty()
 
 st.markdown("---")
 
@@ -1159,7 +1168,8 @@ if not df_final.empty:
         data=pdf_bytes,
         file_name="mapa_de_cotacao_suprimentos.pdf",
         mime="application/pdf",
-        key="btn_pdf_top"
+        key="btn_pdf_top",
+        use_container_width=True,
     )
     xlsx_bytes = gerar_excel(df_final)
     placeholder_xlsx.download_button(
@@ -1167,7 +1177,8 @@ if not df_final.empty:
         data=xlsx_bytes,
         file_name="Comparativo_Cotacao.xlsx",
         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        key="btn_xlsx_top"
+        key="btn_xlsx_top",
+        use_container_width=True,
     )
 elif uploaded_cot is not None:
     st.warning("⚠️ Nenhum item válido encontrado no arquivo carregado.")
