@@ -127,6 +127,10 @@ def gerar_css(tema: str) -> str:
         border-color: {t['verde']} !important;
         color: {t['verde']} !important;
     }}
+    button[data-testid^="stBaseButton"]:disabled {{
+        opacity: 0.45 !important;
+        box-shadow: none !important;
+    }}
     div[data-testid="stTextInput"] input {{
         background-color: {t['input_bg']} !important;
         border: none !important;
@@ -469,6 +473,10 @@ with st.expander("⚙️ Abrir / Fechar Configurações (Upload e Exportação)"
         col_pdf, col_xlsx = st.columns(2)
         placeholder_pdf = col_pdf.empty()
         placeholder_xlsx = col_xlsx.empty()
+        # Placeholders ficam vazios até o mapa ser processado — sem essa
+        # mensagem parece que os botões de PDF/Excel sumiram ou quebraram.
+        placeholder_pdf.button("📥 PDF", disabled=True, key="btn_pdf_desabilitado", use_container_width=True)
+        placeholder_xlsx.button("📊 Excel", disabled=True, key="btn_xlsx_desabilitado", use_container_width=True)
 
 st.markdown("---")
 
