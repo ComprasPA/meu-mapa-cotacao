@@ -3,6 +3,7 @@ import pandas as pd
 import numpy as np
 import os
 import io
+import base64
 import docx
 from fpdf import FPDF
 import unicodedata
@@ -42,6 +43,9 @@ TEMAS = {
         footer_bg='#f8f9fa', footer_border='#2f5597', footer_text='#1f2c34',
         th_bg='#2f5597', th_text='#ffffff', th_border='#b4c6e7',
         td_border='#d9d9d9', td_text='#000000', row_bg='#ffffff',
+        # Cores da marca Parente Andrade — mesma paleta do Portal Gestão de
+        # Compras (comum.py: TEMAS['claro']), usadas só no cabeçalho.
+        verde='#3E8E41', verde_deep='#2E6B31', laranja='#F2861D', laranja_deep='#CE6E10',
     ),
     'Escuro': dict(
         main_bg='#0e1117', text='#f5f5f5', body_text='#e6e6e6',
@@ -50,6 +54,7 @@ TEMAS = {
         footer_bg='#161a20', footer_border='#4f7cff', footer_text='#f5f5f5',
         th_bg='#1f2a3f', th_text='#e8eef7', th_border='#3a4a66',
         td_border='#2a2f38', td_text='#e6e6e6', row_bg='#161a20',
+        verde='#4FA653', verde_deep='#3E8E41', laranja='#F2951D', laranja_deep='#CE6E10',
     ),
 }
 
@@ -58,6 +63,34 @@ def gerar_css(tema: str) -> str:
     t = TEMAS.get(tema, TEMAS['Claro'])
     return f"""
     <style>
+    @import url('https://fonts.googleapis.com/css2?family=Sora:wght@600;700;800&family=Public+Sans:wght@400;500;600;700&display=swap');
+    div.st-key-header_card {{
+        background: {t['expander_bg']};
+        padding: 16px 28px;
+        border-radius: 14px;
+        margin-bottom: 16px;
+        box-shadow: 0 1px 2px rgba(28,36,32,.04), 0 10px 28px -14px rgba(28,36,32,.14);
+        position: relative;
+        overflow: hidden;
+    }}
+    div.st-key-header_card::before {{
+        content: "";
+        position: absolute;
+        left: 0; top: 0; bottom: 0;
+        width: 6px;
+        background: linear-gradient(180deg, {t['verde']}, {t['laranja']});
+    }}
+    div.st-key-header_card > div {{ align-items: center; }}
+    .brand-text-block {{ display: flex; flex-direction: column; align-items: center; line-height: 1.35; }}
+    .brand-eyebrow {{
+        font-family: 'Public Sans', sans-serif; font-weight: 700; font-size: 15.75px;
+        letter-spacing: .12em; text-transform: uppercase; color: {t['laranja_deep']} !important;
+        margin: 0; display: block; white-space: nowrap;
+    }}
+    .brand-subtitle {{
+        font-family: 'Sora', sans-serif; font-weight: 700; font-size: 18px;
+        color: {t['text']} !important; display: block; white-space: nowrap;
+    }}
     .main {{ background-color: {t['main_bg']}; }}
     [data-testid="stAppViewContainer"], [data-testid="stHeader"] {{
         background-color: {t['main_bg']} !important;
@@ -172,6 +205,16 @@ def gerar_css(tema: str) -> str:
     }}
     </style>
     """
+
+
+@st.cache_data(ttl=86400)
+def get_base64_logo():
+    caminho_logo = os.path.join(os.path.dirname(os.path.abspath(__file__)), "logo.png")
+    try:
+        with open(caminho_logo, "rb") as f:
+            return base64.b64encode(f.read()).decode()
+    except FileNotFoundError:
+        return None
 
 
 st.markdown(gerar_css(st.session_state['tema']), unsafe_allow_html=True)
@@ -352,13 +395,29 @@ base_precos, historico_bruto, status_historico = construir_base_precos(
 # do historico_compras.csv versionado no repositório do GitHub. Para
 # atualizar os preços históricos, atualize esse arquivo no repositório.
 # ==============================================================================
-st.title("📊 Gestão Estratégica de Compras | Mapa de Cotação")
-
-with st.expander("⚙️ Abrir / Fechar Configurações (Upload e Exportação)", expanded=False):
-    col_exp0, col_exp1, col_exp2 = st.columns([1, 2, 1])
-
-    with col_exp0:
-        st.markdown("### 🎨 Tema")
+# Cabeçalho com marca — mesmo padrão do Portal Gestão de Compras
+# (comum.py: renderizar_cabecalho): logo + "Coordenação de Suprimentos" +
+# título, com o alternador de tema no canto direito do cartão.
+base64_logo = get_base64_logo()
+with st.container(key="header_card"):
+    c1, c2, c3 = st.columns([1.5, 6.0, 1.5])
+    with c1:
+        if base64_logo:
+            st.markdown(
+                f'<img src="data:image/png;base64,{base64_logo}" style="width:130px; display:block;">',
+                unsafe_allow_html=True,
+            )
+    with c2:
+        st.markdown(
+            '''
+            <div class="brand-text-block">
+                <span class="brand-eyebrow">Coordenação de Suprimentos</span>
+                <span class="brand-subtitle">Gestão Estratégica de Compras | Mapa de Cotação</span>
+            </div>
+            ''',
+            unsafe_allow_html=True,
+        )
+    with c3:
         modo_escuro = st.toggle(
             "☀️ / 🌙",
             value=(st.session_state['tema'] == 'Escuro'),
@@ -369,6 +428,9 @@ with st.expander("⚙️ Abrir / Fechar Configurações (Upload e Exportação)"
         if tema_escolhido != st.session_state['tema']:
             st.session_state['tema'] = tema_escolhido
             st.rerun()
+
+with st.expander("⚙️ Abrir / Fechar Configurações (Upload e Exportação)", expanded=False):
+    col_exp1, col_exp2 = st.columns([2, 1])
 
     with col_exp1:
         st.markdown("### 📁 Upload do Mapa de Cotação")
