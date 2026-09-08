@@ -109,6 +109,9 @@ def gerar_css(tema: str) -> str:
         padding-bottom: 150px !important;
         max-width: 100% !important;
     }}
+    div[data-testid="stMarkdownContainer"] hr {{
+        margin: 4px 0 !important;
+    }}
     header {{ visibility: hidden !important; }}
     #MainMenu {{ visibility: hidden !important; }}
     footer {{ visibility: hidden !important; }}
@@ -157,7 +160,7 @@ def gerar_css(tema: str) -> str:
         background-color: {t['expander_bg']} !important;
         border-radius: 16px !important;
         box-shadow: 0 1px 2px rgba(28,36,32,.04), 0 10px 28px -14px rgba(28,36,32,.14) !important;
-        margin-bottom: 20px !important;
+        margin-bottom: 4px !important;
     }}
     .streamlit-expanderHeader,
     div[data-testid="stExpander"] summary {{
@@ -866,7 +869,8 @@ def gerar_excel(df: pd.DataFrame) -> bytes:
 cotacao = pd.DataFrame()
 if uploaded_cot is not None:
     bar = st.progress(0)
-    st.text("Processando dados...")
+    status_processamento = st.empty()
+    status_processamento.text("Processando dados...")
     for i in range(100):
         time.sleep(0.005)
         bar.progress(i + 1)
@@ -885,6 +889,7 @@ if uploaded_cot is not None:
         st.error(f"Erro ao ler arquivo: {e}")
         cotacao = pd.DataFrame()
     bar.empty()
+    status_processamento.empty()
 
 df_final = pd.DataFrame()
 aviso_valores_estranhos = False
