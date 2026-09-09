@@ -16,6 +16,8 @@ from openpyxl import Workbook
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from openpyxl.utils import get_column_letter
 from st_aggrid import AgGrid, GridOptionsBuilder, JsCode
+import gspread
+from google.oauth2.service_account import Credentials
 
 # ==============================================================================
 # Configuração da Página
@@ -253,23 +255,44 @@ def get_base64_logo(tema: str):
 st.markdown(gerar_css(st.session_state['tema']), unsafe_allow_html=True)
 
 # ==============================================================================
-# 1. BASE HISTÓRICA — mesma lógica da skill "analise-mapa-cotacao"
+# 1. BASE HISTÓRICA — mesma planilha do Portal Gestão de Compras
 #
-# Antes, o painel lia historico_compras.csv sem cabeçalho e "adivinhava"
-# posições de coluna (h_row.get(2), get(4), get(10)...). Isso é frágil e não
-# bate com o processo validado na análise manual. Agora o histórico é lido
-# pelo export padrão de Pedidos de Compra (título na linha 1, cabeçalho na
-# linha 2), com colunas nomeadas, e a base é consolidada por código de
-# Produto exatamente como build_base_precos.py da skill.
+# Antes, o histórico vinha de um historico_compras.csv versionado no
+# repositório (precisava ser atualizado manualmente). Agora lê ao vivo a
+# mesma aba "Pedidos" da planilha Google Sheets usada pelo Portal Gestão de
+# Compras (consulta-parente-andrade/comum.py: obter_client_gspread,
+# carregar_dados_seguros) — mesma conta de serviço, mesmo FILE_ID. Cada
+# linha do Pedidos já É uma compra histórica; não há upload/edição pelo
+# painel — para corrigir um dado, corrija na planilha.
 # ==============================================================================
 
-# Único arquivo-fonte: o historico_compras.csv versionado no repositório do
-# GitHub, sempre no mesmo diretório do app.py. Não há upload/edição pelo
-# painel — para atualizar a base, atualize o arquivo no repositório.
-HISTORICO_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "historico_compras.csv")
+FILE_ID = "1e7pQ512ge5XMnXxsRODEO7V48KgWo6FpKeITFqBSg1o"
 
 HIST_REQUIRED_COLS = ['Produto', 'Descricao.1', 'Unidade', 'Prc Unitario',
                        'Data Emissao', 'Nome Fornece', 'Quantidade', 'Status Aprov']
+
+# Mapeia o nome interno (usado em todo o resto do arquivo, herdado do antigo
+# export TOTVS) para os termos aceitos no cabeçalho real da aba "Pedidos"
+# (comparados sem acento/caixa — ver _achar_coluna_normalizada).
+MAPA_COLUNAS_PEDIDOS = {
+    'Produto': ['produto'],
+    'Descricao.1': ['descricao'],
+    'Unidade': ['um'],
+    'Prc Unitario': ['preco unitario'],
+    'Data Emissao': ['data pedido'],
+    'Nome Fornece': ['fornecedor'],
+    'Quantidade': ['qtd'],
+    'Status Aprov': ['status'],
+}
+
+
+def obter_client_gspread():
+    scope = [
+        "https://www.googleapis.com/auth/spreadsheets",
+        "https://www.googleapis.com/auth/drive",
+    ]
+    creds = Credentials.from_service_account_info(dict(st.secrets["gcp_service_account"]), scopes=scope)
+    return gspread.authorize(creds)
 
 
 def limpar_valor(valor):
@@ -295,49 +318,74 @@ def limpar_valor(valor):
         return 0.0
 
 
-def _ler_historico_bruto(caminho_historico: str) -> pd.DataFrame:
-    """Lê o histórico de Pedidos de Compra, aceitando tanto .csv quanto
-    .xlsx — mesmo layout em ambos os casos (título na linha 1, cabeçalho de
-    colunas na linha 2, export padrão TOTVS/Protheus).
+def _normalizar_texto(valor: str) -> str:
+    s = "".join(c for c in unicodedata.normalize('NFKD', str(valor)) if not unicodedata.combining(c))
+    return s.strip().lower()
 
-    O export brasileiro do TOTVS/Protheus normalmente sai em .csv com:
-      - ';' como separador de campo (porque ',' é o separador decimal);
-      - BOM no início do arquivo (necessita encoding 'utf-8-sig');
-      - números como texto, com separador de milhar '.' e decimal ','
-        (ex.: " 9.500,0000 ", com espaços — tratado depois por limpar_valor).
-    Tentamos ';' primeiro (caso mais comum) e caímos para ',' só se as
-    colunas esperadas não aparecerem — cobre também um CSV exportado no
-    padrão internacional (vírgula), como o simulado durante os testes.
+
+def _achar_coluna_normalizada(colunas, termos):
+    for col in colunas:
+        col_norm = _normalizar_texto(col)
+        for termo in termos:
+            if _normalizar_texto(termo) in col_norm:
+                return col
+    return None
+
+
+def _ler_historico_bruto() -> pd.DataFrame:
+    """Lê a aba "Pedidos" da mesma planilha Google Sheets usada pelo Portal
+    Gestão de Compras (todas as colunas como texto — igual a
+    carregar_dados_seguros() em consulta-parente-andrade/main.py) e renomeia
+    para os nomes internos usados no resto deste arquivo.
     """
-    for sep in (';', ','):
-        try:
-            df = pd.read_csv(caminho_historico, header=1, sep=sep, encoding='utf-8-sig')
-        except Exception:
-            continue
-        if 'Produto' in df.columns and 'Prc Unitario' in df.columns:
-            return df
-    # Nenhuma tentativa achou as colunas esperadas — devolve a última leitura
-    # (com ',') para que a checagem de HIST_REQUIRED_COLS gere uma mensagem
-    # de erro clara para o usuário, em vez de travar aqui.
-    return pd.read_csv(caminho_historico, header=1, sep=',', encoding='utf-8-sig')
+    client = obter_client_gspread()
+    spreadsheet = client.open_by_key(FILE_ID)
+    try:
+        worksheet = spreadsheet.worksheet("Pedidos")
+    except gspread.exceptions.WorksheetNotFound:
+        worksheet = spreadsheet.get_worksheet(0)
+
+    dados = worksheet.get_all_values()
+    if not dados:
+        return pd.DataFrame(columns=HIST_REQUIRED_COLS)
+
+    cabecalho = [str(c).strip() for c in dados[0]]
+    linhas = dados[1:]
+    linhas_normalizadas = []
+    for linha in linhas:
+        linha = list(linha) + [""] * (len(cabecalho) - len(linha))
+        linhas_normalizadas.append(linha[:len(cabecalho)])
+
+    df = pd.DataFrame(linhas_normalizadas, columns=cabecalho, dtype=str).fillna('')
+
+    renomeio = {}
+    for nome_interno, termos in MAPA_COLUNAS_PEDIDOS.items():
+        col_real = _achar_coluna_normalizada(df.columns, termos)
+        if col_real:
+            renomeio[col_real] = nome_interno
+    return df.rename(columns=renomeio)
 
 
 def normalizar_codigo(valor):
-    """Extrai só os dígitos de um código de produto e remove zeros à esquerda,
-    para casar códigos vindos com ou sem padding (ex.: '0000001268', '1268' e
-    1268 devem ser tratados como o mesmo item)."""
+    """Extrai só os dígitos de um código de produto e completa com zeros à
+    esquerda até 10 dígitos — o formato padrão do código de Produto no
+    TOTVS/Portal Gestão de Compras (ex.: '1268' e '0000001268' viram ambos
+    '0000001268', e são tratados como o mesmo item)."""
     if pd.isna(valor):
         return None
     s = ''.join(filter(str.isdigit, str(valor)))
     if not s:
         return None
-    return str(int(s))
+    return str(int(s)).zfill(10)
 
 
-@st.cache_data(show_spinner="Consolidando base histórica de preços...")
-def construir_base_precos(caminho_historico: str, mtime: float, status_filtro: str = None):
+@st.cache_data(ttl=60, show_spinner="Consolidando base histórica de preços...")
+def construir_base_precos(status_filtro: str = None):
     """
-    Constrói a base histórica consolidada de preços.
+    Constrói a base histórica consolidada de preços a partir da planilha ao
+    vivo (aba "Pedidos", mesma base do Portal Gestão de Compras). Resultado
+    fica em cache por 60s (mesmo TTL de carregar_dados_seguros() no Portal)
+    para não bater na API do Google Sheets a cada rerun.
 
     Regra de negócio (decisão explícita do usuário — "HISTÓRICO É HISTÓRICO"):
     por padrão TODAS as linhas do histórico entram na consolidação,
@@ -351,22 +399,16 @@ def construir_base_precos(caminho_historico: str, mtime: float, status_filtro: s
                           (usado na consulta rápida por código)
         status_msg: texto para o badge de status no topo da página
     """
-    if not os.path.exists(caminho_historico):
-        return pd.DataFrame(), pd.DataFrame(), (
-            f"Base de dados indisponível — arquivo '{os.path.basename(caminho_historico)}' "
-            "não encontrado no repositório."
-        )
-
     try:
-        df = _ler_historico_bruto(caminho_historico)
+        df = _ler_historico_bruto()
     except Exception as e:
-        return pd.DataFrame(), pd.DataFrame(), f"Erro ao ler histórico: {e}"
+        return pd.DataFrame(), pd.DataFrame(), f"Erro ao ler a planilha de Pedidos: {e}"
 
     faltando = [c for c in HIST_REQUIRED_COLS if c not in df.columns]
     if faltando:
         return pd.DataFrame(), pd.DataFrame(), (
-            f"Histórico inválido — colunas faltando: {faltando}. "
-            "Confira se o arquivo tem título na linha 1 e cabeçalho na linha 2."
+            f"Planilha de Pedidos inválida — colunas não encontradas: {faltando}. "
+            "Confira os cabeçalhos da aba \"Pedidos\"."
         )
 
     if status_filtro:
@@ -408,18 +450,11 @@ def construir_base_precos(caminho_historico: str, mtime: float, status_filtro: s
 
     base_precos = ultimo.merge(agg, on='Cod_Norm', how='left')
 
-    data_mod = datetime.datetime.fromtimestamp(mtime).strftime('%d/%m/%Y %H:%M')
-    status_msg = f"Base atualizada em: {data_mod}"
+    status_msg = f"Base atualizada em: {datetime.datetime.now().strftime('%d/%m/%Y %H:%M')}"
     return base_precos, df_f, status_msg
 
 
-def _mtime_or_zero(path):
-    return os.path.getmtime(path) if os.path.exists(path) else 0.0
-
-
-base_precos, historico_bruto, status_historico = construir_base_precos(
-    HISTORICO_PATH, _mtime_or_zero(HISTORICO_PATH)
-)
+base_precos, historico_bruto, status_historico = construir_base_precos()
 
 # ==============================================================================
 # Cabeçalho + Configurações (upload do mapa de cotação e exportação)
@@ -968,7 +1003,7 @@ if not cotacao.empty:
         item_contador += 1
         resultados_brutos.append({
             'Item': num_item,
-            'Código': str(raw_cod).strip(),
+            'Código': cod_norm,
             'Cod_Norm': cod_norm,
             'Descrição': desc,
             'Unidade': unidade,
@@ -1219,9 +1254,9 @@ if codigo_pesquisa:
         registros = historico_bruto[historico_bruto['Cod_Norm'] == cod_norm_pesquisa].sort_values('Data Emissao')
 
         if registros.empty:
-            st.warning(f"⚠️ Nenhuma compra anterior encontrada no histórico para o código **{codigo_pesquisa}**.")
+            st.warning(f"⚠️ Nenhuma compra anterior encontrada no histórico para o código **{cod_norm_pesquisa}**.")
         else:
-            st.success(f"Foram encontradas **{len(registros)}** ocorrência(s) de compra para o código **{codigo_pesquisa}**:")
+            st.success(f"Foram encontradas **{len(registros)}** ocorrência(s) de compra para o código **{cod_norm_pesquisa}**:")
 
             df_historico_item = pd.DataFrame({
                 'Data Emissão PC': registros['Data Emissao'].dt.strftime('%d/%m/%Y'),

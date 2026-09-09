@@ -7,3 +7,5 @@ beautifulsoup4
 openpyxl
 plotly
 streamlit-aggrid==1.2.1.post2
+gspread
+google-auth
