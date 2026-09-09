@@ -358,6 +358,16 @@ def _ler_historico_bruto() -> pd.DataFrame:
 
     df = pd.DataFrame(linhas_normalizadas, columns=cabecalho, dtype=str).fillna('')
 
+    # Pedido marcado "EXCLUÍDO DO TOTVS" (sumiu do relatorio do Totvs, ver
+    # detectar_pedidos_excluidos_import no Portal Gestão de Compras) fica na
+    # planilha mas nao deve entrar em nenhum calculo/consulta daqui - decisao
+    # explicita do usuario, mesmo com a regra "HISTÓRICO É HISTÓRICO" abaixo
+    # (aquela regra e sobre Status Aprov normal, essa exclusao e diferente:
+    # o pedido pode nem ter existido de verdade no Totvs).
+    col_status_bruto = next((c for c in df.columns if c.upper().strip() == "STATUS"), None)
+    if col_status_bruto:
+        df = df[df[col_status_bruto].astype(str).str.strip().str.upper() != "EXCLUÍDO DO TOTVS"].reset_index(drop=True)
+
     renomeio = {}
     for nome_interno, termos in MAPA_COLUNAS_PEDIDOS.items():
         col_real = _achar_coluna_normalizada(df.columns, termos)
