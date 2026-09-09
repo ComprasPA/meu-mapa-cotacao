@@ -436,7 +436,13 @@ def construir_base_precos(status_filtro: str = None):
         df_f['Quantidade'] = df_f['Quantidade'].apply(limpar_valor)
 
     df_f = df_f[df_f['Prc Unitario'].notna() & (df_f['Prc Unitario'] > 0) & df_f['Produto'].notna()].copy()
-    df_f['Data Emissao'] = pd.to_datetime(df_f['Data Emissao'], errors='coerce', dayfirst=True)
+    # DATA PEDIDO na planilha "Pedidos" sai no formato americano M/D/AAAA
+    # (ex.: "1/13/2026" = 13 de janeiro — o "13" só pode ser dia, provando
+    # que o mês vem primeiro), diferente do CSV antigo do TOTVS (DD/MM/AAAA).
+    # dayfirst=True aqui dava NaT pra qualquer dia > 12 e, pior, invertia
+    # silenciosamente dia/mês nos demais (ex.: "1/7/2026" virava 1º de
+    # julho em vez de 7 de janeiro).
+    df_f['Data Emissao'] = pd.to_datetime(df_f['Data Emissao'], errors='coerce', dayfirst=False)
     df_f['Cod_Norm'] = df_f['Produto'].apply(normalizar_codigo)
     df_f = df_f.dropna(subset=['Cod_Norm']).sort_values('Data Emissao')
 
