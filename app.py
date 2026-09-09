@@ -644,28 +644,38 @@ def extrair_tabela_mhtml(arquivo_bytes):
 
 
 def extrair_tabela_excel_inteligente(arquivo_excel):
+    """Acha a linha de cabeçalho da tabela de itens em QUALQUER aba do
+    arquivo, em vez de confiar no nome da aba — exports do TOTVS costumam
+    ter uma aba "Parametros" (metadados, sem itens) antes da aba real de
+    dados ("Analise da Cotação", "Cotação por Produto" etc., nome varia).
+    Pontua cada linha candidata por quantas categorias de termo de
+    cabeçalho ela cobre (código/produto, descrição, fornecedor/valor) e
+    fica com a de maior pontuação — a linha real de cabeçalho da tabela
+    de itens cobre as três; uma pergunta de metadado tipo "Descrição do
+    produto ?" cobre no máximo duas.
+    """
+    def normalizar(txt):
+        return "".join([c for c in unicodedata.normalize('NFKD', str(txt).lower()) if not unicodedata.combining(c)])
+
     try:
         xls = pd.ExcelFile(arquivo_excel)
-        sheet_name = xls.sheet_names[0]
-        # Prioriza abas cujo nome sugira o mapa de cotação por produto,
-        # espelhando a heurística usada na skill (Passo 2).
+
+        melhor_sheet, melhor_header_idx, melhor_pontuacao = xls.sheet_names[0], 0, -1
         for s in xls.sheet_names:
-            s_low = s.lower()
-            if 'cota' in s_low and 'produto' in s_low:
-                sheet_name = s
-                break
+            df_raw = pd.read_excel(xls, sheet_name=s, header=None, dtype=str)
+            for idx, row in df_raw.iterrows():
+                row_norm = normalizar(" ".join(str(x) for x in row.values if pd.notna(x)))
+                pontuacao = sum([
+                    any(t in row_norm for t in ('codigo', 'produto', 'item')),
+                    'descricao' in row_norm,
+                    any(t in row_norm for t in ('fornecedor', 'vlr', 'valor', 'preco')),
+                ])
+                if pontuacao > melhor_pontuacao:
+                    melhor_pontuacao, melhor_sheet, melhor_header_idx = pontuacao, s, idx
+                if pontuacao == 3:
+                    break
 
-        df_raw = pd.read_excel(xls, sheet_name=sheet_name, header=None, dtype=str)
-
-        header_row_idx = 0
-        for idx, row in df_raw.iterrows():
-            row_str = " ".join([str(x) for x in row.values if pd.notna(x)]).lower()
-            row_str_norm = "".join([c for c in unicodedata.normalize('NFKD', row_str) if not unicodedata.combining(c)])
-            if 'codigo' in row_str_norm or 'descricao' in row_str_norm or 'vlr' in row_str_norm or 'preco' in row_str_norm or 'item' in row_str_norm:
-                header_row_idx = idx
-                break
-
-        df = pd.read_excel(xls, sheet_name=sheet_name, header=header_row_idx, dtype=str)
+        df = pd.read_excel(xls, sheet_name=melhor_sheet, header=melhor_header_idx, dtype=str)
         df.columns = [str(c).strip() for c in df.columns]
         return df
     except Exception as e:
@@ -964,7 +974,12 @@ if not cotacao.empty:
         'unit', 'vl unit', 'vl. unit', 'vl.unit', 'valor'
     ])
 
-    c_forn = achar_coluna(cotacao, ['fornecedor', 'empresa', 'nome'])
+    # Prioriza "Razão Social" (nome real do fornecedor) sobre "Fornecedor"
+    # quando os dois existem — em export TOTVS, "Fornecedor" costuma ser só
+    # o código interno (ex.: "000079"), e "Razão Social" tem o nome de fato
+    # (ex.: "LJ GUERRA E CIA LTDA").
+    c_forn = achar_coluna(cotacao, ['razão social', 'razao social', 'nome fantasia']) \
+        or achar_coluna(cotacao, ['fornecedor', 'empresa', 'nome'])
     c_status = achar_coluna(cotacao, ['status'])
 
     # Forward-fill do código: cobre o formato bruto de mapa de cotação em que
