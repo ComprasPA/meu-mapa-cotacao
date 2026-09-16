@@ -185,6 +185,82 @@ class TestVariacaoEObservacao:
         assert aviso is False
 
 
+class TestValorUnitarioComDesconto:
+    """Quando a planilha traz TOTAL e Desconto separados do Vl.Unitário
+    bruto (formato real do TOTVS, confirmado com arquivo do usuário
+    021132-1.xlsx), o valor cotado tem que ser o unitário JÁ com o
+    desconto aplicado: (TOTAL - Desconto) / Qtde — nunca o Vl.Unitário
+    bruto. Fórmula e nomes de coluna conferidos com a planilha real do
+    usuário (que já fazia essa conta manualmente numa coluna auxiliar)."""
+
+    def test_usa_total_menos_desconto_dividido_pela_qtde(self):
+        cotacao = pd.DataFrame({
+            'Código': ['2892'], 'Descrição': ['Cinta Carga'], 'Qtde': ['2'],
+            'Vl.Unitario': ['68,000'], 'TOTAL': ['123,05'], 'Desconto': ['6,80'],
+            'Fornecedor': ['Fornecedor A'],
+        })
+        df_final, _ = processar_mapa_cotacao(cotacao, _base_precos([]))
+        # (123,05 - 6,80) / 2 = 58,125
+        assert df_final.iloc[0]['Valor Cotado (R$)'] == pytest.approx(58.125)
+
+    def test_desconto_zero_valor_liquido_igual_ao_bruto(self):
+        cotacao = pd.DataFrame({
+            'Código': ['2892'], 'Descrição': ['Cinta Carga'], 'Qtde': ['2'],
+            'Vl.Unitario': ['31,000'], 'TOTAL': ['62,00'], 'Desconto': ['0'],
+            'Fornecedor': ['Fornecedor A'],
+        })
+        df_final, _ = processar_mapa_cotacao(cotacao, _base_precos([]))
+        assert df_final.iloc[0]['Valor Cotado (R$)'] == pytest.approx(31.0)
+
+    def test_ignora_vl_unitario_bruto_quando_total_e_desconto_existem(self):
+        # Vl.Unitario bruto (100) é bem maior que o líquido calculado (45) —
+        # se a função usasse o bruto por engano, o teste pegaria.
+        cotacao = pd.DataFrame({
+            'Código': ['1268'], 'Descrição': ['Item'], 'Qtde': ['1'],
+            'Vl.Unitario': ['100,00'], 'TOTAL': ['100,00'], 'Desconto': ['55,00'],
+            'Fornecedor': ['Fornecedor A'],
+        })
+        df_final, _ = processar_mapa_cotacao(cotacao, _base_precos([]))
+        assert df_final.iloc[0]['Valor Cotado (R$)'] == pytest.approx(45.0)
+
+    def test_sem_coluna_total_ou_desconto_usa_vl_unitario_bruto_normalmente(self):
+        # Formato antigo (sem TOTAL/Desconto) continua funcionando como
+        # antes — não pode quebrar os arquivos que não têm essas colunas.
+        cotacao = pd.DataFrame({
+            'Código': ['1268'], 'Descrição': ['Parafuso'], 'Qtd': ['10'],
+            'Valor Unitário': ['12,50'], 'Fornecedor': ['Fornecedor A'],
+        })
+        df_final, _ = processar_mapa_cotacao(cotacao, _base_precos([]))
+        assert df_final.iloc[0]['Valor Cotado (R$)'] == pytest.approx(12.5)
+
+    def test_total_vazio_cai_pro_vl_unitario_bruto(self):
+        cotacao = pd.DataFrame({
+            'Código': ['1268'], 'Descrição': ['Item'], 'Qtde': ['1'],
+            'Vl.Unitario': ['20,00'], 'TOTAL': [''], 'Desconto': ['5,00'],
+            'Fornecedor': ['Fornecedor A'],
+        })
+        df_final, _ = processar_mapa_cotacao(cotacao, _base_precos([]))
+        assert df_final.iloc[0]['Valor Cotado (R$)'] == pytest.approx(20.0)
+
+    def test_melhor_cotacao_considera_o_valor_liquido_nao_o_bruto(self):
+        # Fornecedor Caro tem Vl.Unitario bruto MENOR mas desconto pequeno
+        # (líquido 90); Fornecedor Barato tem bruto maior mas desconto
+        # grande (líquido 45) — o vencedor tem que ser o de líquido menor.
+        cotacao = pd.DataFrame({
+            'Código': ['1268', None],
+            'Descrição': ['Item', 'Item'],
+            'Qtde': ['1', '1'],
+            'Vl.Unitario': ['95,00', '100,00'],
+            'TOTAL': ['95,00', '100,00'],
+            'Desconto': ['5,00', '55,00'],
+            'Fornecedor': ['Fornecedor Caro Aparente', 'Fornecedor Barato de Verdade'],
+        })
+        df_final, _ = processar_mapa_cotacao(cotacao, _base_precos([]))
+        assert len(df_final) == 1
+        assert df_final.iloc[0]['Fornecedor Cotado'] == 'Fornecedor Barato de Verdade'
+        assert df_final.iloc[0]['Valor Cotado (R$)'] == pytest.approx(45.0)
+
+
 class TestColunaValorAlternativa:
     def test_sem_coluna_de_valor_reconhecivel_tenta_outra_coluna_numerica(self):
         # Export "cru" às vezes não tem uma coluna óbvia de valor: a função

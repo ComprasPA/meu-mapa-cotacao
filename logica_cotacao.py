@@ -224,6 +224,16 @@ def processar_mapa_cotacao(cotacao: pd.DataFrame, base_precos: pd.DataFrame):
         'unit', 'vl unit', 'vl. unit', 'vl.unit', 'valor'
     ])
 
+    # Quando a planilha traz TOTAL (valor total da linha, já líquido) e
+    # Desconto (valor do desconto concedido) separados do Vl.Unitário
+    # bruto, o preço comparável de verdade é o unitário com desconto já
+    # aplicado: (TOTAL - Desconto) / Qtde — mesma conta que o comprador já
+    # fazia manualmente numa coluna auxiliar no Excel (decisão explícita do
+    # usuário: a comparação sempre tem que usar esse valor, nunca o
+    # Vl.Unitário bruto, quando essas colunas existirem).
+    c_total = achar_coluna(cotacao, ['total'])
+    c_desconto = achar_coluna(cotacao, ['desconto'])
+
     # Prioriza "Razão Social" (nome real do fornecedor) sobre "Fornecedor"
     # quando os dois existem — em export TOTVS, "Fornecedor" costuma ser só
     # o código interno (ex.: "000079"), e "Razão Social" tem o nome de fato
@@ -263,7 +273,15 @@ def processar_mapa_cotacao(cotacao: pd.DataFrame, base_precos: pd.DataFrame):
         unidade = str(row[c_unid]) if c_unid and pd.notna(row[c_unid]) else ''
         qtd = limpar_valor(row[c_qtd]) if c_qtd and pd.notna(row[c_qtd]) else 1.0
 
-        valor_cotado = limpar_valor(row[c_vlr]) if c_vlr and pd.notna(row[c_vlr]) else 0.0
+        valor_cotado = 0.0
+        if c_total and c_desconto and qtd > 0:
+            total_linha = limpar_valor(row[c_total]) if pd.notna(row[c_total]) else 0.0
+            desconto_linha = limpar_valor(row[c_desconto]) if pd.notna(row[c_desconto]) else 0.0
+            if total_linha > 0:
+                valor_cotado = (total_linha - desconto_linha) / qtd
+
+        if valor_cotado <= 0:
+            valor_cotado = limpar_valor(row[c_vlr]) if c_vlr and pd.notna(row[c_vlr]) else 0.0
         if valor_cotado <= 0:
             for col_nome in row.index:
                 val_tentativa = limpar_valor(row[col_nome])
