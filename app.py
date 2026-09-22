@@ -649,8 +649,14 @@ if not df_final.empty:
     coluna_representatividade = 'Representatividade (%)'
 
     df_grid = df_final.copy()
+    # Confere se a coluna existe antes de formatar: durante a janela de um
+    # deploy no Streamlit Cloud, o rerun às vezes pega o app.py novo mas
+    # ainda com um logica_cotacao.py em cache (processo antigo), o que faz
+    # uma coluna recém-adicionada faltar por alguns instantes — sem essa
+    # checagem, isso derruba o app com KeyError até o próximo reboot.
     for col in colunas_moeda + colunas_pct + [coluna_representatividade]:
-        df_grid[col] = pd.to_numeric(df_grid[col].replace("", np.nan), errors='coerce')
+        if col in df_grid.columns:
+            df_grid[col] = pd.to_numeric(df_grid[col].replace("", np.nan), errors='coerce')
     df_grid['Data Última Compra'] = pd.to_datetime(
         df_grid['Data Última Compra'].replace("", np.nan), errors='coerce'
     ).dt.strftime('%Y-%m-%d')
