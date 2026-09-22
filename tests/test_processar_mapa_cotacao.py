@@ -261,6 +261,53 @@ class TestValorUnitarioComDesconto:
         assert df_final.iloc[0]['Valor Cotado (R$)'] == pytest.approx(45.0)
 
 
+class TestRepresentatividade:
+    """Representatividade (%): quanto o valor total da linha (Valor Cotado
+    × Qtd) pesa dentro do valor total de toda a cotação — ajuda a enxergar
+    quais itens concentram o valor (análise ABC/Pareto)."""
+
+    def test_dois_itens_representatividade_soma_100(self):
+        cotacao = pd.DataFrame({
+            'Código': ['1', '2'],
+            'Descrição': ['Item 1', 'Item 2'],
+            'Qtd': ['10', '10'],
+            'Valor Unitário': ['90,00', '10,00'],
+            'Fornecedor': ['F1', 'F2'],
+        })
+        df_final, _ = processar_mapa_cotacao(cotacao, _base_precos([]))
+        # item1: 900 de 1000 -> 90%; item2: 100 de 1000 -> 10%
+        linha1 = df_final[df_final['Código'] == '0000000001'].iloc[0]
+        linha2 = df_final[df_final['Código'] == '0000000002'].iloc[0]
+        assert linha1['Representatividade (%)'] == pytest.approx(90.0)
+        assert linha2['Representatividade (%)'] == pytest.approx(10.0)
+        assert (linha1['Representatividade (%)'] + linha2['Representatividade (%)']) == pytest.approx(100.0)
+
+    def test_considera_a_quantidade_nao_so_o_preco_unitario(self):
+        # Preço unitário igual nos dois, mas quantidades bem diferentes —
+        # a representatividade tem que refletir o valor TOTAL da linha,
+        # não só o preço unitário.
+        cotacao = pd.DataFrame({
+            'Código': ['1', '2'],
+            'Descrição': ['Item 1', 'Item 2'],
+            'Qtd': ['90', '10'],
+            'Valor Unitário': ['1,00', '1,00'],
+            'Fornecedor': ['F1', 'F2'],
+        })
+        df_final, _ = processar_mapa_cotacao(cotacao, _base_precos([]))
+        linha1 = df_final[df_final['Código'] == '0000000001'].iloc[0]
+        linha2 = df_final[df_final['Código'] == '0000000002'].iloc[0]
+        assert linha1['Representatividade (%)'] == pytest.approx(90.0)
+        assert linha2['Representatividade (%)'] == pytest.approx(10.0)
+
+    def test_item_unico_representa_100_por_cento(self):
+        cotacao = pd.DataFrame({
+            'Código': ['1268'], 'Descrição': ['Parafuso'], 'Qtd': ['5'],
+            'Valor Unitário': ['20,00'], 'Fornecedor': ['Fornecedor A'],
+        })
+        df_final, _ = processar_mapa_cotacao(cotacao, _base_precos([]))
+        assert df_final.iloc[0]['Representatividade (%)'] == pytest.approx(100.0)
+
+
 class TestColunaValorAlternativa:
     def test_sem_coluna_de_valor_reconhecivel_tenta_outra_coluna_numerica(self):
         # Export "cru" às vezes não tem uma coluna óbvia de valor: a função

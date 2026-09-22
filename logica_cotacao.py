@@ -375,12 +375,24 @@ def processar_mapa_cotacao(cotacao: pd.DataFrame, base_precos: pd.DataFrame):
                     'Preço Médio (R$)', 'Preço Mín. Histórico (R$)', 'Preço Máx. Histórico (R$)']:
             df_merge[col] = df_merge[col].apply(lambda v: "" if pd.isna(v) else v)
 
+        # Representatividade (%): quanto o valor total da linha (Valor
+        # Cotado × Qtd) pesa dentro do valor total da cotação inteira —
+        # ajuda o comprador a enxergar quais itens realmente merecem
+        # atenção/negociação (poucos itens costumam concentrar a maior
+        # parte do valor, ex.: análise ABC/Pareto).
+        valor_total_linha = df_merge['Valor Cotado (R$)'] * df_merge['Qtd']
+        soma_valor_total = valor_total_linha.sum()
+        if soma_valor_total > 0:
+            df_merge['Representatividade (%)'] = (valor_total_linha / soma_valor_total * 100).round(2)
+        else:
+            df_merge['Representatividade (%)'] = 0.0
+
         colunas_exatas = [
             'Item', 'Código', 'Descrição', 'Unidade', 'Qtd',
             'Fornecedor Cotado', 'Valor Cotado (R$)',
             'Último Preço Pago (R$)', 'Data Última Compra', 'Fornecedor Última Compra',
             'Preço Médio (R$)', 'Preço Mín. Histórico (R$)', 'Preço Máx. Histórico (R$)',
-            'Var. vs Último (%)', 'Var. vs Médio (%)', 'Observação'
+            'Var. vs Último (%)', 'Var. vs Médio (%)', 'Representatividade (%)', 'Observação'
         ]
         df_final = df_merge[colunas_exatas]
 
@@ -487,11 +499,11 @@ def gerar_pdf(df, numero_cotacao=None):
     pdf = PDFProfissional()
     pdf.add_page()
 
-    col_widths = [8, 16, 44, 8, 17, 34, 17, 34, 17, 20, 20, 20, 22]
+    col_widths = [8, 16, 38, 8, 17, 30, 17, 30, 17, 20, 20, 20, 14, 22]
     headers = [
         "Item", "Codigo", "Descricao", "Qtd",
         "Vl Cotado", "Forn. Cotado", "Ult. Preco",
-        "Forn. Ult.", "Preco Med.", "Var vs Med(%)", "Preco Min.", "Preco Max.", "Observacao"
+        "Forn. Ult.", "Preco Med.", "Var vs Med(%)", "Preco Min.", "Preco Max.", "Repr.%", "Observacao"
     ]
 
     pdf.set_fill_color(47, 85, 151)
@@ -527,15 +539,17 @@ def gerar_pdf(df, numero_cotacao=None):
         max_str = formatar_brl(max_val) if max_val != "" else ""
 
         var_str = formatar_pct(var_val) if var_val != "" else ""
+        repr_val = row['Representatividade (%)']
+        repr_str = f"{float(repr_val):.1f}%" if repr_val != "" and pd.notna(repr_val) else ""
 
         pdf.cell(col_widths[0], 6, limpar_texto_pdf(str(row['Item'])), border=1, fill=fill, align="C")
         pdf.cell(col_widths[1], 6, limpar_texto_pdf(str(row['Código'])), border=1, fill=fill, align="C")
-        pdf.cell(col_widths[2], 6, limpar_texto_pdf(str(row['Descrição'])[:30]), border=1, fill=fill, align="L")
+        pdf.cell(col_widths[2], 6, limpar_texto_pdf(str(row['Descrição'])[:26]), border=1, fill=fill, align="L")
         pdf.cell(col_widths[3], 6, limpar_texto_pdf(str(row['Qtd'])), border=1, fill=fill, align="C")
         pdf.cell(col_widths[4], 6, limpar_texto_pdf(formatar_brl(row['Valor Cotado (R$)'])), border=1, fill=fill, align="R")
-        pdf.cell(col_widths[5], 6, limpar_texto_pdf(str(row['Fornecedor Cotado'])[:20]), border=1, fill=fill, align="L")
+        pdf.cell(col_widths[5], 6, limpar_texto_pdf(str(row['Fornecedor Cotado'])[:18]), border=1, fill=fill, align="L")
         pdf.cell(col_widths[6], 6, limpar_texto_pdf(ult_preco_str), border=1, fill=fill, align="R")
-        pdf.cell(col_widths[7], 6, limpar_texto_pdf(forn_ant_str[:20]), border=1, fill=fill, align="L")
+        pdf.cell(col_widths[7], 6, limpar_texto_pdf(forn_ant_str[:18]), border=1, fill=fill, align="L")
         pdf.cell(col_widths[8], 6, limpar_texto_pdf(preco_med_str), border=1, fill=fill, align="R")
 
         if var_val != "":
@@ -551,7 +565,8 @@ def gerar_pdf(df, numero_cotacao=None):
         pdf.set_text_color(0, 0, 0)
         pdf.cell(col_widths[10], 6, limpar_texto_pdf(min_str), border=1, fill=fill, align="R")
         pdf.cell(col_widths[11], 6, limpar_texto_pdf(max_str), border=1, fill=fill, align="R")
-        pdf.cell(col_widths[12], 6, limpar_texto_pdf(str(row['Observação'])[:22]), border=1, fill=fill, align="L")
+        pdf.cell(col_widths[12], 6, limpar_texto_pdf(repr_str), border=1, fill=fill, align="R")
+        pdf.cell(col_widths[13], 6, limpar_texto_pdf(str(row['Observação'])[:22]), border=1, fill=fill, align="L")
 
         pdf.ln()
         fill = not fill
@@ -596,7 +611,7 @@ def gerar_excel(df: pd.DataFrame, numero_cotacao=None) -> bytes:
                'Fornecedor Cotado', 'Valor Cotado (R$)',
                'Último Preço Pago (R$)', 'Data Última Compra', 'Fornecedor Última Compra',
                'Preço Médio (R$)', 'Preço Mín. Histórico (R$)', 'Preço Máx. Histórico (R$)',
-               'Var. vs Último (%)', 'Var. vs Médio (%)', 'Observação']
+               'Var. vs Último (%)', 'Var. vs Médio (%)', 'Representatividade (%)', 'Observação']
 
     # Linha de título com o número da cotação é opcional (só quando
     # informado) para não deslocar a posição do cabeçalho no caso comum —
@@ -638,6 +653,7 @@ def gerar_excel(df: pd.DataFrame, numero_cotacao=None) -> bytes:
             float(r['Preço Máx. Histórico (R$)']) if r['Preço Máx. Histórico (R$)'] != "" else None,
             round(float(r['Var. vs Último (%)']), 2) if r['Var. vs Último (%)'] != "" else None,
             round(float(r['Var. vs Médio (%)']), 2) if r['Var. vs Médio (%)'] != "" else None,
+            round(float(r['Representatividade (%)']), 2) if r['Representatividade (%)'] != "" else None,
             r['Observação'],
         ])
 
@@ -652,8 +668,9 @@ def gerar_excel(df: pd.DataFrame, numero_cotacao=None) -> bytes:
         for idx in (13, 14):
             row[idx].number_format = '+0.0"%";-0.0"%";0.0"%"'
         row[14].fill = _var_fill(row[14].value)
+        row[15].number_format = '0.0"%"'
 
-    widths = [7, 11, 42, 7, 7, 32, 15, 16, 16, 32, 15, 15, 15, 14, 14, 24]
+    widths = [7, 11, 42, 7, 7, 32, 15, 16, 16, 32, 15, 15, 15, 14, 14, 14, 24]
     for i, w in enumerate(widths, start=1):
         ws.column_dimensions[get_column_letter(i)].width = w
     ws.freeze_panes = ws.cell(row=header_row + 1, column=1).coordinate

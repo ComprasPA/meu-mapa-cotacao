@@ -646,9 +646,10 @@ if not df_final.empty:
     colunas_moeda = ['Valor Cotado (R$)', 'Último Preço Pago (R$)', 'Preço Médio (R$)',
                       'Preço Mín. Histórico (R$)', 'Preço Máx. Histórico (R$)']
     colunas_pct = ['Var. vs Último (%)', 'Var. vs Médio (%)']
+    coluna_representatividade = 'Representatividade (%)'
 
     df_grid = df_final.copy()
-    for col in colunas_moeda + colunas_pct:
+    for col in colunas_moeda + colunas_pct + [coluna_representatividade]:
         df_grid[col] = pd.to_numeric(df_grid[col].replace("", np.nan), errors='coerce')
     df_grid['Data Última Compra'] = pd.to_datetime(
         df_grid['Data Última Compra'].replace("", np.nan), errors='coerce'
@@ -694,6 +695,14 @@ if not df_final.empty:
             return {color: '#555555', fontWeight: 'bold'};
         }
     """)
+    # Representatividade é sempre >= 0 (não é uma variação/desvio como as
+    # colunas Var. vs Último/Médio) — sem seta nem cor de alerta, só o %.
+    formatter_representatividade = JsCode("""
+        function(params) {
+            if (params.value === null || params.value === undefined) { return ''; }
+            return Number(params.value).toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2}) + '%';
+        }
+    """)
 
     t_grid = TEMAS.get(st.session_state['tema'], TEMAS['Claro'])
     tema_aggrid = 'dark' if st.session_state['tema'] == 'Escuro' else 'light'
@@ -722,6 +731,9 @@ if not df_final.empty:
     for col in colunas_pct:
         gb.configure_column(col, type=['numericColumn'], valueFormatter=formatter_pct,
                              cellStyle=cellstyle_pct, width=140)
+    gb.configure_column(coluna_representatividade, type=['numericColumn'],
+                         valueFormatter=formatter_representatividade,
+                         cellStyle={'textAlign': 'right'}, width=140)
     gb.configure_column('Observação', width=180, cellStyle={'textAlign': 'center'})
     grid_options = gb.build()
 
