@@ -392,7 +392,7 @@ def processar_mapa_cotacao(cotacao: pd.DataFrame, base_precos: pd.DataFrame):
             'Fornecedor Cotado', 'Valor Cotado (R$)',
             'Último Preço Pago (R$)', 'Data Última Compra', 'Fornecedor Última Compra',
             'Preço Médio (R$)', 'Preço Mín. Histórico (R$)', 'Preço Máx. Histórico (R$)',
-            'Var. vs Último (%)', 'Var. vs Médio (%)', 'Representatividade (%)', 'Observação'
+            'Var. vs Último (%)', 'Var. vs Médio (%)', 'Observação', 'Representatividade (%)'
         ]
         df_final = df_merge[colunas_exatas]
 
@@ -499,11 +499,11 @@ def gerar_pdf(df, numero_cotacao=None):
     pdf = PDFProfissional()
     pdf.add_page()
 
-    col_widths = [8, 16, 38, 8, 17, 30, 17, 30, 17, 20, 20, 20, 14, 22]
+    col_widths = [8, 16, 38, 8, 17, 30, 17, 30, 17, 20, 20, 20, 22, 14]
     headers = [
         "Item", "Codigo", "Descricao", "Qtd",
         "Vl Cotado", "Forn. Cotado", "Ult. Preco",
-        "Forn. Ult.", "Preco Med.", "Var vs Med(%)", "Preco Min.", "Preco Max.", "Repr.%", "Observacao"
+        "Forn. Ult.", "Preco Med.", "Var vs Med(%)", "Preco Min.", "Preco Max.", "Observacao", "Repr.%"
     ]
 
     pdf.set_fill_color(47, 85, 151)
@@ -565,8 +565,8 @@ def gerar_pdf(df, numero_cotacao=None):
         pdf.set_text_color(0, 0, 0)
         pdf.cell(col_widths[10], 6, limpar_texto_pdf(min_str), border=1, fill=fill, align="R")
         pdf.cell(col_widths[11], 6, limpar_texto_pdf(max_str), border=1, fill=fill, align="R")
-        pdf.cell(col_widths[12], 6, limpar_texto_pdf(repr_str), border=1, fill=fill, align="R")
-        pdf.cell(col_widths[13], 6, limpar_texto_pdf(str(row['Observação'])[:22]), border=1, fill=fill, align="L")
+        pdf.cell(col_widths[12], 6, limpar_texto_pdf(str(row['Observação'])[:22]), border=1, fill=fill, align="L")
+        pdf.cell(col_widths[13], 6, limpar_texto_pdf(repr_str), border=1, fill=fill, align="R")
 
         pdf.ln()
         fill = not fill
@@ -611,7 +611,7 @@ def gerar_excel(df: pd.DataFrame, numero_cotacao=None) -> bytes:
                'Fornecedor Cotado', 'Valor Cotado (R$)',
                'Último Preço Pago (R$)', 'Data Última Compra', 'Fornecedor Última Compra',
                'Preço Médio (R$)', 'Preço Mín. Histórico (R$)', 'Preço Máx. Histórico (R$)',
-               'Var. vs Último (%)', 'Var. vs Médio (%)', 'Representatividade (%)', 'Observação']
+               'Var. vs Último (%)', 'Var. vs Médio (%)', 'Observação', 'Representatividade (%)']
 
     # Linha de título com o número da cotação é opcional (só quando
     # informado) para não deslocar a posição do cabeçalho no caso comum —
@@ -653,8 +653,8 @@ def gerar_excel(df: pd.DataFrame, numero_cotacao=None) -> bytes:
             float(r['Preço Máx. Histórico (R$)']) if r['Preço Máx. Histórico (R$)'] != "" else None,
             round(float(r['Var. vs Último (%)']), 2) if r['Var. vs Último (%)'] != "" else None,
             round(float(r['Var. vs Médio (%)']), 2) if r['Var. vs Médio (%)'] != "" else None,
-            round(float(r['Representatividade (%)']), 2) if r['Representatividade (%)'] != "" else None,
             r['Observação'],
+            round(float(r['Representatividade (%)']), 2) if r['Representatividade (%)'] != "" else None,
         ])
 
     last_row = ws.max_row
@@ -668,9 +668,9 @@ def gerar_excel(df: pd.DataFrame, numero_cotacao=None) -> bytes:
         for idx in (13, 14):
             row[idx].number_format = '+0.0"%";-0.0"%";0.0"%"'
         row[14].fill = _var_fill(row[14].value)
-        row[15].number_format = '0.0"%"'
+        row[16].number_format = '0.0"%"'
 
-    widths = [7, 11, 42, 7, 7, 32, 15, 16, 16, 32, 15, 15, 15, 14, 14, 14, 24]
+    widths = [7, 11, 42, 7, 7, 32, 15, 16, 16, 32, 15, 15, 15, 14, 14, 24, 14]
     for i, w in enumerate(widths, start=1):
         ws.column_dimensions[get_column_letter(i)].width = w
     ws.freeze_panes = ws.cell(row=header_row + 1, column=1).coordinate

@@ -21,7 +21,6 @@ def _df_final_exemplo():
         'Qtd': 100,
         'Fornecedor Cotado': 'Fornecedor Barato',
         'Valor Cotado (R$)': 9.90,
-        'Representatividade (%)': 66.44,
         'Último Preço Pago (R$)': 10.0,
         'Data Última Compra': pd.Timestamp('2026-01-15'),
         'Fornecedor Última Compra': 'Fornecedor Antigo',
@@ -31,6 +30,7 @@ def _df_final_exemplo():
         'Var. vs Último (%)': -1.0,
         'Var. vs Médio (%)': -1.0,
         'Observação': 'Próximo da média histórica',
+        'Representatividade (%)': 66.44,
     }, {
         'Item': '2',
         'Código': '0000009999',
@@ -39,7 +39,6 @@ def _df_final_exemplo():
         'Qtd': 200,
         'Fornecedor Cotado': 'Fornecedor X',
         'Valor Cotado (R$)': 2.5,
-        'Representatividade (%)': 33.56,
         'Último Preço Pago (R$)': "",
         'Data Última Compra': "",
         'Fornecedor Última Compra': "",
@@ -49,6 +48,7 @@ def _df_final_exemplo():
         'Var. vs Último (%)': "",
         'Var. vs Médio (%)': "",
         'Observação': 'Sem histórico de compra',
+        'Representatividade (%)': 33.56,
     }])
 
 
