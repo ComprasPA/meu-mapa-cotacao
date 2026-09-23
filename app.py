@@ -776,6 +776,46 @@ if not df_final.empty:
         key="btn_xlsx_top",
         use_container_width=True,
     )
+
+    # ==========================================================================
+    # Espelho do Pedido: se o comprador fechar sempre com a melhor cotação de
+    # cada item (que já é o 'Fornecedor Cotado' de cada linha de df_final),
+    # o pedido de compra real fica dividido entre vários fornecedores — aqui
+    # mostramos quanto cada um recebe e com quais itens, igual a um pedido
+    # de fato emitido pra cada fornecedor.
+    # ==========================================================================
+    st.markdown("---")
+    st.subheader("💰 Espelho do Pedido por Fornecedor")
+    st.caption(
+        "Se você fechar com a melhor cotação de cada item, é assim que o pedido fica dividido "
+        "entre os fornecedores — itens, quantidades, preço unitário e total de cada um."
+    )
+
+    df_pedido = df_final.copy()
+    df_pedido['Preço Total (R$)'] = df_pedido['Qtd'] * df_pedido['Valor Cotado (R$)']
+
+    resumo_fornecedores = (
+        df_pedido.groupby('Fornecedor Cotado')['Preço Total (R$)']
+        .agg(['count', 'sum'])
+        .rename(columns={'count': 'Itens', 'sum': 'Valor Total'})
+        .sort_values('Valor Total', ascending=False)
+    )
+
+    st.metric("Valor Total do Pedido (melhor cotação por item)",
+              formatar_brl(df_pedido['Preço Total (R$)'].sum()))
+
+    for fornecedor, linha in resumo_fornecedores.iterrows():
+        with st.expander(
+            f"🏢 {fornecedor} — {int(linha['Itens'])} item(ns) — {formatar_brl(linha['Valor Total'])}"
+        ):
+            itens_forn = df_pedido.loc[
+                df_pedido['Fornecedor Cotado'] == fornecedor,
+                ['Item', 'Código', 'Descrição', 'Qtd', 'Valor Cotado (R$)', 'Preço Total (R$)']
+            ].copy()
+            itens_forn['Valor Cotado (R$)'] = itens_forn['Valor Cotado (R$)'].apply(formatar_brl)
+            itens_forn['Preço Total (R$)'] = itens_forn['Preço Total (R$)'].apply(formatar_brl)
+            st.table(itens_forn.set_index('Item'))
+            st.markdown(f"**Total {fornecedor}: {formatar_brl(linha['Valor Total'])}**")
 elif uploaded_cot is not None:
     st.warning("⚠️ Nenhum item válido encontrado no arquivo carregado.")
 
