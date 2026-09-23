@@ -801,7 +801,7 @@ if not df_final.empty:
         .sort_values('Valor Total', ascending=False)
     )
 
-    st.metric("Valor Total do Pedido (melhor cotação por item)",
+    st.metric("Custo Total da Compra (melhor cotação por item)",
               formatar_brl(df_pedido['Preço Total (R$)'].sum()))
 
     for fornecedor, linha in resumo_fornecedores.iterrows():
@@ -877,7 +877,8 @@ if codigo_pesquisa:
                     fill='tozeroy',
                     line=dict(color='#00d2c4', width=3),
                     marker=dict(size=8, color='#00d2c4'),
-                    textposition="top center"
+                    textposition="top center",
+                    cliponaxis=False,
                 )
 
                 fig.update_layout(
@@ -892,7 +893,7 @@ if codigo_pesquisa:
                         gridcolor='rgba(200,200,200,0.3)',
                         showticklabels=False,
                     ),
-                    margin=dict(l=20, r=20, t=50, b=20)
+                    margin=dict(l=45, r=45, t=50, b=20)
                 )
 
                 st.plotly_chart(fig, use_container_width=True)
